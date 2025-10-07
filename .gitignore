@@ -1,0 +1,6 @@
+CMSSW_*
+*.root
+compile_commands.json
+data/*
+.vscode/*
+.__afs*

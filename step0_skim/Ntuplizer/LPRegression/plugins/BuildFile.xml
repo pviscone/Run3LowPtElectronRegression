@@ -1,0 +1,5 @@
+<library file="*.cc" name="NtuplizerLPRegressionPlugins">
+  <use name="FWCore/Framework"/>
+  <use name="DataFormats/PatCandidates"/>
+  <use name="vdt"/>
+</library>
