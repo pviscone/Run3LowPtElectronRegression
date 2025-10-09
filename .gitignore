@@ -4,3 +4,10 @@ compile_commands.json
 data/*
 .vscode/*
 .__afs*
+*/.envs/*
+*/.venv/*
+.envs
+__pycache__
+*.pkl
+*.keras
+trash
