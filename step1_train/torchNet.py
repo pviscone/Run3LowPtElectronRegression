@@ -239,6 +239,9 @@ class MVENetwork:
             self._Y_mean = norm["Y_mean"]
             self._Y_std = norm["Y_std"]
 
+    def compile(self):
+        self.model = torch.compile(self.model)
+
     def train(
         self,
         X_train,
@@ -348,7 +351,7 @@ class MVENetwork:
                 if validation:
                     val_loss = run_val(X_val, Y_val, None)
                     self.val_loss.append(val_loss)
-                if verbose and (epoch % 10 == 0 or epoch == n_epochs - 1):
+                if verbose and (epoch % 1 == 0 or epoch == n_epochs - 1):
                     print(
                         f"Epoch {epoch + 1}/{n_epochs} Train Loss: {train_loss:.4f}",
                         end="",
@@ -399,7 +402,7 @@ class MVENetwork:
             if validation:
                 val_loss = run_val(X_val, Y_val, None)
                 self.val_loss.append(val_loss)
-            if verbose and (epoch % 10 == 0 or epoch == n_epochs - 1):
+            if verbose and (epoch % 1 == 0 or epoch == n_epochs - 1):
                 print(
                     f"Epoch {epoch + 1}/{n_epochs} Train Loss: {train_loss:.4f}", end=""
                 )
