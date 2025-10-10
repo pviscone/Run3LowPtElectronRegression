@@ -138,6 +138,7 @@ class MVENetwork:
     ):
         self._normalization = False
         self.model_kwargs = {
+            "input_shape": input_shape,
             "n_hidden_common": n_hidden_common,
             "n_hidden_mean": n_hidden_mean,
             "n_hidden_var": n_hidden_var,
@@ -222,22 +223,30 @@ class MVENetwork:
     def show(self):
         print(self.model)
 
-    def load(self, path):
-        self.model.load_state_dict(
-            torch.load(os.path.join(path, "model.pt"), map_location=self.device)
-        )
+    @staticmethod
+    def load(path, device=None):
         with open(os.path.join(path, "model_kwargs.pkl"), "rb") as f:
-            self.model_kwargs = pickle.load(f)
+            model_kwargs = pickle.load(f)
+        model = MVENetwork(
+            **model_kwargs, device=device
+        )
+
         with open(os.path.join(path, "fit_kwargs.pkl"), "rb") as f:
-            self.fit_kwargs = pickle.load(f)
+            model.fit_kwargs = pickle.load(f)
+
         norm_path = os.path.join(path, "normalization.npz")
         if os.path.exists(norm_path):
             norm = np.load(norm_path)
-            self._normalization = True
-            self._X_mean = norm["X_mean"]
-            self._X_std = norm["X_std"]
-            self._Y_mean = norm["Y_mean"]
-            self._Y_std = norm["Y_std"]
+            model._normalization = True
+            model._X_mean = norm["X_mean"]
+            model._X_std = norm["X_std"]
+            model._Y_mean = norm["Y_mean"]
+            model._Y_std = norm["Y_std"]
+
+        model.model.load_state_dict(
+            torch.load(os.path.join(path, "model.pt"), map_location=device)
+        )
+        return model
 
     def compile(self):
         self.model = torch.compile(self.model)
