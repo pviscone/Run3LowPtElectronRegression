@@ -76,14 +76,6 @@ process.extendedPFEle = cms.EDProducer(
     rho=cms.InputTag("fixedGridRhoFastjetAll"),
 )
 
-process.extendedLPEleMatchedToPF = cms.EDProducer(
-    "ElectronMatcher",
-    src1=cms.InputTag("extendedLPEle"),
-    src2=cms.InputTag("extendedPFEle"),
-    dRmax=cms.double(0.1),
-    storeUnmatched=cms.bool(True),
-    varLabel=cms.string("PF"),
-)
 
 if not args.data:
     process.selectedGenPart = cms.EDProducer(
@@ -103,7 +95,7 @@ if not args.data:
 
     process.genMatchedLPEle = cms.EDProducer(
         "GenElectronMatcher",
-        src1=cms.InputTag("extendedLPEleMatchedToPF"),
+        src1=cms.InputTag("extendedLPEle"),
         src2=cms.InputTag("selectedGenPart"),
         dRmax=cms.double(0.1),
         storeUnmatched=cms.bool(args.storeUnmatched),
@@ -119,6 +111,26 @@ if not args.data:
         varLabel=cms.string("Gen"),
     )
 
+PFsource = "genMatchedPFEle" if not args.data else "extendedPFEle"
+LPsource = "genMatchedLPEle" if not args.data else "extendedLPEle"
+process.extendedLPEleMatchedToPF = cms.EDProducer(
+    "ElectronMatcher",
+    src1=cms.InputTag(LPsource),
+    src2=cms.InputTag(PFsource),
+    dRmax=cms.double(0.1),
+    storeUnmatched=cms.bool(True),
+    varLabel=cms.string("PF"),
+)
+
+
+process.extendedPFEleMatchedToLP = cms.EDProducer(
+    "ElectronMatcher",
+    src1=cms.InputTag(PFsource),
+    src2=cms.InputTag(LPsource),
+    dRmax=cms.double(0.1),
+    storeUnmatched=cms.bool(True),
+    varLabel=cms.string("LP"),
+)
 
 #! Training vars
 vars = cms.PSet(
@@ -207,10 +219,9 @@ vars = cms.PSet(
     ),
 )
 
-LPsrc = "extendedLPEleMatchedToPF" if args.data else "genMatchedLPEle"
 process.LPEleTable = cms.EDProducer(
     "SimpleCandidateFlatTableProducer",
-    src=cms.InputTag(LPsrc),
+    src=cms.InputTag("extendedLPEleMatchedToPF"),
     cut=cms.string(""),  # already filtered
     name=cms.string("LPEle"),
     doc=cms.string("Selected LP electrons"),
@@ -222,16 +233,18 @@ process.LPEleTable = cms.EDProducer(
     ),
 )
 
-PFsrc = "extendedPFEle" if args.data else "genMatchedPFEle"
 process.PFEleTable = cms.EDProducer(
     "SimpleCandidateFlatTableProducer",
-    src=cms.InputTag(PFsrc),
+    src=cms.InputTag("extendedPFEleMatchedToLP"),
     cut=cms.string(""),  # already filtered
     name=cms.string("PFEle"),
     doc=cms.string("Selected PF electrons"),
     singleton=cms.bool(False),
     extension=cms.bool(False),
-    variables=vars,
+    variables=vars.clone(
+        LPIdx=LazyVar("userInt('LPIdx')", int, doc="Index of the matched LP electron"),
+        isAlsoLP=LazyVar("userInt('isLP')", bool, doc="Is matched to a LP electron"),
+    ),
 )
 
 
@@ -251,6 +264,7 @@ process.p = cms.Path(
     process.extendedLPEle
     + process.extendedPFEle
     + process.extendedLPEleMatchedToPF
+    + process.extendedPFEleMatchedToLP
     + process.LPEleTable
     + process.PFEleTable
 )
@@ -310,10 +324,11 @@ if not args.data:
     process.p = cms.Path(
         process.extendedLPEle
         + process.extendedPFEle
-        + process.extendedLPEleMatchedToPF
         + process.selectedGenPart
         + process.genMatchedLPEle
         + process.genMatchedPFEle
+        + process.extendedLPEleMatchedToPF
+        + process.extendedPFEleMatchedToLP
         + process.LPEleTable
         + process.PFEleTable
         + process.GenPartTable
