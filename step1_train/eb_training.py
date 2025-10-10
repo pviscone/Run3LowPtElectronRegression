@@ -6,12 +6,6 @@ import matplotlib.pyplot as plt
 import mplhep as hep
 hep.style.use("CMS")
 
-datasets = {
-    "2024" : "../data/dataset2024.root",
-    "2023" : "../data/dataset2023.root",
-    "2022" : "../data/dataset2022.root",
-}
-
 features = [
     "LPEle_rawEnergy",
     "LPEle_etaWidth",
@@ -40,16 +34,16 @@ features = [
     "LPEle_numberOfClusters",
     "LPEle_iEtaOrX",
     "LPEle_iPhiOrY",
-    "LPEle_iEtaMod5",
-    "LPEle_iPhiMod2",
-    "LPEle_iEtaMod20",
-    "LPEle_iPhiMod20",
+    "LPEle_iEtaMod5", #(barrel only)
+    "LPEle_iPhiMod2", #(barrel only)
+    "LPEle_iEtaMod20", #(barrel only)
+    "LPEle_iPhiMod20", #(barrel only)
     #"LPEle_rawESEnergy", (endcap only)
     "LPEle_isAlsoPF"
 ]
 
 
-df = pd.read_pickle("../data/full_data.pkl")
+df = pd.read_pickle("../data/full_data_splitted_w.pkl")
 df = df[df["LPEle_isEB"]==1]
 
 df_train, df_test = train_test_split(df, test_size=0.2, random_state=666)
@@ -63,12 +57,11 @@ Y_val = df_test["LPEle_target"].to_numpy()
 
 #%%
 
-
 model = MVENetwork(
     input_shape=len(features),
-    n_hidden_common=[128, 128, 64],
-    n_hidden_mean=[64, 32],
-    n_hidden_var=[64, 32],
+    n_hidden_common=[],
+    n_hidden_mean=[128, 64, 32],
+    n_hidden_var=[128, 64, 32],
 )
 
 #TODO check why normalize gives nan
@@ -89,7 +82,6 @@ if hasattr(model, 'val_loss'):
     ax.plot(model.val_loss, label="val")
 ax.set_xlabel("Epoch")
 ax.set_ylabel("Loss")
-ax.set_yscale("log")
 ax.legend()
 
 # %%
