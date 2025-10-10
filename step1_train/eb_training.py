@@ -30,7 +30,7 @@ features = [
     "LPEle_e2x5RightOverE5x5",
     "LPEle_e2x5TopOverE5x5",
     "LPEle_e2x5BottomOverE5x5",
-    "LPEle_nSaturatedXtals",
+    #"LPEle_nSaturatedXtals", (always 0)
     "LPEle_numberOfClusters",
     "LPEle_iEtaOrX",
     "LPEle_iPhiOrY",
@@ -64,8 +64,7 @@ model = MVENetwork(
     n_hidden_var=[128, 64, 32],
 )
 
-#TODO check why normalize gives nan
-#model.normalize(X_train, Y_train)
+model.normalize(X_train, Y_train)
 model.train(
     X_train, Y_train, sample_weight=w,
     X_val = X_val, Y_val = Y_val,
