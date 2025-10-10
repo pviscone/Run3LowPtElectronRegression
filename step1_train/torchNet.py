@@ -2,12 +2,17 @@ import os
 import pickle
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import numpy as np
 import gc
 
+
 def get_l2_reg(module):
-    return sum(torch.sum(param ** 2) for param in module.parameters() if param.requires_grad and param.dim() > 1)
+    return sum(
+        torch.sum(param**2)
+        for param in module.parameters()
+        if param.requires_grad and param.dim() > 1
+    )
+
 
 def normalize(x, mean=None, std=None):
     if mean is None:
@@ -15,6 +20,7 @@ def normalize(x, mean=None, std=None):
     if std is None:
         std = np.std(x, axis=0)
     return (x - mean) / std
+
 
 def reverse_normalized(x_normalized, mean, std):
     return x_normalized * std + mean
@@ -26,30 +32,34 @@ def variance_transformation(b, numpy=True):
     else:
         return torch.exp(b) + 1e-6
 
+
 def get_loss(transform, beta=None):
-    if beta == -1:
-        def mean_only(targets, outputs):
-            mu = outputs[..., 0:1]
-            y = targets[..., 0:1]
-            return F.mse_loss(mu, y)
-        return mean_only
     if beta is not None:
-        def beta_nll_loss(targets, outputs):
+
+        def beta_nll_loss(targets, outputs, sample_weight=None):
             mu = outputs[..., 0:1]
             var = transform(outputs[..., 1:2], numpy=False)
             # Stop gradient not directly supported, but can use detach
             loss = ((targets - mu) ** 2) / var + torch.log(var)
             loss = loss * var.detach() ** beta
+            if sample_weight is not None:
+                loss = loss * sample_weight.unsqueeze(-1)
             return loss.mean()
+
         return beta_nll_loss
     else:
-        def negative_log_likelihood(targets, outputs):
+
+        def negative_log_likelihood(targets, outputs, sample_weight=None):
             mu = outputs[..., 0:1]
             var = transform(outputs[..., 1:2], numpy=False)
             y = targets[..., 0:1]
             loglik = -torch.log(var) - ((y - mu) ** 2) / var
+            if sample_weight is not None:
+                loglik = loglik * sample_weight.unsqueeze(-1)
             return -loglik.mean()
+
         return negative_log_likelihood
+
 
 class MVENet(nn.Module):
     def __init__(
@@ -58,33 +68,33 @@ class MVENet(nn.Module):
         n_hidden_common,
         n_hidden_mean,
         n_hidden_var,
-        reg_common=0,
-        reg_mean=0,
-        reg_var=0,
         dropout_input=0,
         dropout_common=0,
         dropout_mean=0,
         dropout_var=0,
     ):
         super().__init__()
+
         self.input_shape = input_shape
         layers = []
         in_features = input_shape
         # Dropout input
         if dropout_input > 0:
             layers.append(nn.Dropout(dropout_input))
+
         # Common layers
-        for i, n in enumerate(n_hidden_common):
+        for n in n_hidden_common:
             if dropout_common > 0:
                 layers.append(nn.Dropout(dropout_common))
             layers.append(nn.Linear(in_features, n))
             layers.append(nn.ELU())
             in_features = n
         self.common = nn.Sequential(*layers)
+
         # Mean branch
         mean_layers = []
         mean_in = in_features
-        for i, n in enumerate(n_hidden_mean):
+        for n in n_hidden_mean:
             if dropout_mean > 0:
                 mean_layers.append(nn.Dropout(dropout_mean))
             mean_layers.append(nn.Linear(mean_in, n))
@@ -92,10 +102,11 @@ class MVENet(nn.Module):
             mean_in = n
         mean_layers.append(nn.Linear(mean_in, 1))
         self.mean_branch = nn.Sequential(*mean_layers)
+
         # Variance branch
         var_layers = []
         var_in = in_features
-        for i, n in enumerate(n_hidden_var):
+        for n in n_hidden_var:
             if dropout_var > 0:
                 var_layers.append(nn.Dropout(dropout_var))
             var_layers.append(nn.Linear(var_in, n))
@@ -110,6 +121,7 @@ class MVENet(nn.Module):
         var_out = self.var_branch(inter)
         return torch.cat([mean_out, var_out], dim=-1)
 
+
 class MVENetwork:
     def __init__(
         self,
@@ -118,23 +130,17 @@ class MVENetwork:
         n_hidden_common,
         n_hidden_mean,
         n_hidden_var,
-        reg_common=0,
-        reg_mean=0,
-        reg_var=0,
         dropout_input=0,
         dropout_common=0,
         dropout_mean=0,
         dropout_var=0,
-        device=None
+        device=None,
     ):
         self._normalization = False
         self.model_kwargs = {
             "n_hidden_common": n_hidden_common,
             "n_hidden_mean": n_hidden_mean,
             "n_hidden_var": n_hidden_var,
-            "reg_common": reg_common,
-            "reg_mean": reg_mean,
-            "reg_var": reg_var,
             "dropout_input": dropout_input,
             "dropout_common": dropout_common,
             "dropout_mean": dropout_mean,
@@ -146,9 +152,6 @@ class MVENetwork:
             n_hidden_common=n_hidden_common,
             n_hidden_mean=n_hidden_mean,
             n_hidden_var=n_hidden_var,
-            reg_common=reg_common,
-            reg_mean=reg_mean,
-            reg_var=reg_var,
             dropout_input=dropout_input,
             dropout_common=dropout_common,
             dropout_mean=dropout_mean,
@@ -220,7 +223,9 @@ class MVENetwork:
         print(self.model)
 
     def load(self, path):
-        self.model.load_state_dict(torch.load(os.path.join(path, "model.pt"), map_location=self.device))
+        self.model.load_state_dict(
+            torch.load(os.path.join(path, "model.pt"), map_location=self.device)
+        )
         with open(os.path.join(path, "model_kwargs.pkl"), "rb") as f:
             self.model_kwargs = pickle.load(f)
         with open(os.path.join(path, "fit_kwargs.pkl"), "rb") as f:
@@ -294,17 +299,19 @@ class MVENetwork:
         # Prepare sample_weight tensor
         if sample_weight is not None:
             sample_weight = np.asarray(sample_weight, dtype=np.float32)
-            assert sample_weight.shape[0] == X_train.shape[0], "Sample weight length must match number of samples"
-            sample_weight = torch.tensor(sample_weight, dtype=torch.float32).to(self.device)
-        else:
-            sample_weight = None
+            assert sample_weight.shape[0] == X_train.shape[0], (
+                "Sample weight length must match number of samples"
+            )
+            sample_weight = torch.tensor(sample_weight, dtype=torch.float32).to(
+                self.device
+            )
 
         loss_fn = get_loss(variance_transformation, beta)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=learn_rate)
 
-        def run_epoch(X, Y, W=None, train=True):
+        def run_epoch(X, Y, W=None):
             epoch_loss = 0.0
-            self.model.train(train)
+            self.model.train(True)
             idx = np.arange(X.shape[0])
             np.random.shuffle(idx)
             for start in range(0, X.shape[0], batch_size):
@@ -315,30 +322,14 @@ class MVENetwork:
                 wb = W[batch_idx] if W is not None else None
                 optimizer.zero_grad()
                 out = self.model(xb)
-                # --- Sample weights implementation ---
-                if wb is not None:
-                    # Compute per-sample loss (no reduction)
-                    loss_per_sample = get_loss(variance_transformation, beta)
-                    # Output from loss_fn is either shape [batch,] or [batch, 1]
-                    loss_vals = loss_per_sample(yb, out)
-                    # If the loss returns a scalar, treat as unweighted
-                    if loss_vals.dim() == 0:
-                        loss = loss_vals
-                    else:
-                        # If the loss returns per-sample values, weight them
-                        if loss_vals.shape != wb.shape:
-                            loss_vals = loss_vals.view(-1)
-                        loss = torch.mean(loss_vals * wb)
-                else:
-                    loss = loss_fn(yb, out)
+                loss = loss_fn(yb, out, sample_weight=wb)
 
                 l2_common = reg_common * get_l2_reg(self.model.common)
                 l2_mean = reg_mean * get_l2_reg(self.model.mean_branch)
                 l2_var = reg_var * get_l2_reg(self.model.var_branch)
-                loss = loss + l2_common + l2_mean + l2_var
-                if train:
-                    loss.backward()
-                    optimizer.step()
+                full_loss = loss + l2_common + l2_mean + l2_var
+                full_loss.backward()
+                optimizer.step()
                 epoch_loss += loss.item() * xb.size(0)
             return epoch_loss / X.shape[0]
 
@@ -346,29 +337,22 @@ class MVENetwork:
             self.model.eval()
             with torch.no_grad():
                 out = self.model(X)
-                if W is not None:
-                    loss_per_sample = get_loss(variance_transformation, beta)
-                    loss_vals = loss_per_sample(Y, out)
-                    if loss_vals.dim() == 0:
-                        loss = loss_vals
-                    else:
-                        if loss_vals.shape != W.shape:
-                            loss_vals = loss_vals.view(-1)
-                        loss = torch.mean(loss_vals * W)
-                else:
-                    loss = loss_fn(Y, out)
+                loss = loss_fn(Y, out, sample_weight=W)
                 return loss.item()
 
         # If no warmup, train both mean and variance together
         if not warmup:
             for epoch in range(n_epochs):
-                train_loss = run_epoch(X_train, Y_train, sample_weight, train=True)
+                train_loss = run_epoch(X_train, Y_train, sample_weight)
                 self.train_loss.append(train_loss)
                 if validation:
                     val_loss = run_val(X_val, Y_val, None)
                     self.val_loss.append(val_loss)
                 if verbose and (epoch % 10 == 0 or epoch == n_epochs - 1):
-                    print(f"Epoch {epoch+1}/{n_epochs} Train Loss: {train_loss:.4f}", end="")
+                    print(
+                        f"Epoch {epoch + 1}/{n_epochs} Train Loss: {train_loss:.4f}",
+                        end="",
+                    )
                     if validation:
                         print(f" Val Loss: {val_loss:.4f}", end="")
                     print()
@@ -378,13 +362,16 @@ class MVENetwork:
         for param in self.model.var_branch.parameters():
             param.requires_grad = False
         for epoch in range(warmup):
-            train_loss = run_epoch(X_train, Y_train, sample_weight, train=True)
+            train_loss = run_epoch(X_train, Y_train, sample_weight)
             self.train_loss.append(train_loss)
             if validation:
                 val_loss = run_val(X_val, Y_val, None)
                 self.val_loss.append(val_loss)
-            if verbose and (epoch % 10 == 0 or epoch == warmup - 1):
-                print(f"Warmup Epoch {epoch+1}/{warmup} Train Loss: {train_loss:.4f}", end="")
+            if verbose and (epoch % 1 == 0 or epoch == warmup - 1):
+                print(
+                    f"Warmup Epoch {epoch + 1}/{warmup} Train Loss: {train_loss:.4f}",
+                    end="",
+                )
                 if validation:
                     print(f" Val Loss: {val_loss:.4f}", end="")
                 print()
@@ -394,8 +381,9 @@ class MVENetwork:
             y_true = Y_train.cpu().numpy().flatten()
             logmse = np.log(np.mean(np.square(mean_preds - y_true)))
             last_var_layer = self.model.var_branch[-1]
-            w, b = last_var_layer.weight, last_var_layer.bias
-            last_var_layer.bias.data = torch.tensor([logmse], dtype=torch.float32, device=last_var_layer.bias.device)
+            last_var_layer.bias.data = torch.tensor(
+                [logmse], dtype=torch.float32, device=last_var_layer.bias.device
+            )
 
         # Unfreeze variance branch
         for param in self.model.var_branch.parameters():
@@ -406,13 +394,15 @@ class MVENetwork:
                 param.requires_grad = False
         # Train both branches
         for epoch in range(n_epochs):
-            train_loss = run_epoch(X_train, Y_train, sample_weight, train=True)
+            train_loss = run_epoch(X_train, Y_train, sample_weight)
             self.train_loss.append(train_loss)
             if validation:
                 val_loss = run_val(X_val, Y_val, None)
                 self.val_loss.append(val_loss)
             if verbose and (epoch % 10 == 0 or epoch == n_epochs - 1):
-                print(f"Epoch {epoch+1}/{n_epochs} Train Loss: {train_loss:.4f}", end="")
+                print(
+                    f"Epoch {epoch + 1}/{n_epochs} Train Loss: {train_loss:.4f}", end=""
+                )
                 if validation:
                     print(f" Val Loss: {val_loss:.4f}", end="")
                 print()
