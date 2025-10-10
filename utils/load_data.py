@@ -28,15 +28,17 @@ def get_h(values, bins, arr):
     return res
 
 #Lpele_branch needed only to pass the lp structure
-def weights_and_merge(arrays_dict, balance_year=True, balance_genpt=True, genpt="GenEle_pt", genidx="LPEle_GenIdx", bins=None, lpele_branch="LPEle_pt"):
+def weights_and_merge(arrays_dict, balance_year=True, balance_genpt="splitted", genpt="GenEle_pt", genidx="LPEle_GenIdx", bins=None, lpele_branch="LPEle_pt"):
+    n_electrons = [len(ak.ravel(arrays[lpele_branch]).to_numpy()) for arrays in arrays_dict.values()]
+    mean_n_electrons = np.mean(n_electrons)
+
     for year, arrays in arrays_dict.items():
         arrays["LPEle_w"] = ak.ones_like(arrays[lpele_branch])
         if balance_year:
-            mean_events = np.mean(len(arrays))
-            arrays["LPEle_year_w"] = ak.ones_like(arrays[lpele_branch])*(mean_events/len(arrays))
+            arrays["LPEle_year_w"] = ak.ones_like(arrays[lpele_branch])*(mean_n_electrons/len(ak.ravel(arrays[lpele_branch]).to_numpy()))
             arrays["LPEle_w"] = arrays["LPEle_w"]*arrays["LPEle_year_w"]
 
-        if balance_genpt:
+        def compute_pt_w(arrays, bins, genpt, genidx, selection=None):
             if bins is None:
                 bins = np.linspace(1, 100, 200)
             elif isinstance(bins, np.ndarray):
@@ -49,16 +51,35 @@ def weights_and_merge(arrays_dict, balance_year=True, balance_genpt=True, genpt=
             unbalance_hist = hist.Hist(hist.axis.Variable(bins, name="gen_pt", label="gen_pt"))
             unbalance_hist.fill(bins)
 
-            pt = ak.flatten(arrays[genpt][arrays[genidx]]).to_numpy()
+            gen_idx = arrays[genidx]
+            if selection:
+                gen_idx = eval(f"gen_idx[{selection}]")
+                selector = eval(selection)
+            pt = ak.flatten(arrays[genpt][gen_idx]).to_numpy()
             gen_pt = ak.flatten(arrays[genpt]).to_numpy()
             getpt_hist.fill(gen_pt)
             pt_hist.fill(pt)
             eff_hist = pt_hist/getpt_hist.values()
             unbalance_hist = unbalance_hist/(eff_hist/eff_hist.integrate(0)).values()
 
-            pt_w=get_h(unbalance_hist.values(), unbalance_hist.axes[0].edges, ak.ravel(pt).to_numpy())
+            pt_weights=get_h(unbalance_hist.values(), unbalance_hist.axes[0].edges, ak.ravel(pt).to_numpy())
+
+            pt_w = ak.ones_like(arrays[lpele_branch])
+            pt_w = ak.ravel(pt_w).to_numpy()
+            if selection:
+                pt_w[ak.ravel(selector).to_numpy()] = pt_weights
             pt_w = ak.unflatten(pt_w, ak.num(arrays[lpele_branch], axis=1))
-            arrays["LPEle_pt_w"] = ak.ones_like(arrays[lpele_branch])*len(arrays)*pt_w/np.sum(pt_w)
+            return pt_w
+
+        if balance_genpt == "full":
+            pt_w = compute_pt_w(arrays, bins, genpt, genidx)
+            arrays["LPEle_pt_w"] = ak.ones_like(arrays[lpele_branch])*len(ak.ravel(arrays[lpele_branch]).to_numpy())*pt_w/np.sum(pt_w)
+            arrays["LPEle_w"] = arrays["LPEle_w"] * arrays["LPEle_pt_w"]
+        elif balance_genpt == "splitted":
+            pt_w_eb = compute_pt_w(arrays, bins, genpt, genidx, selection = 'arrays["LPEle_isEB"]==1')
+            pt_w_ee = compute_pt_w(arrays, bins, genpt, genidx, selection = 'arrays["LPEle_isEB"]==0')
+            arrays["LPEle_pt_w"] = ak.where(arrays["LPEle_isEB"]==1, pt_w_eb, pt_w_ee)
+            arrays["LPEle_pt_w"] = arrays["LPEle_pt_w"]*len(ak.ravel(arrays[lpele_branch]).to_numpy())/np.sum(ak.ravel(arrays["LPEle_pt_w"]))
             arrays["LPEle_w"] = arrays["LPEle_w"] * arrays["LPEle_pt_w"]
 
     arrays = ak.concatenate(list(arrays_dict.values()), axis=0)

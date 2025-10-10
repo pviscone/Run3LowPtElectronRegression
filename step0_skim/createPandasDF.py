@@ -41,10 +41,10 @@ features = [
     "LPEle_numberOfClusters",
     "LPEle_iEtaOrX",
     "LPEle_iPhiOrY",
-    "LPEle_iEtaMod5",
-    "LPEle_iPhiMod2",
-    "LPEle_iEtaMod20",
-    "LPEle_iPhiMod20",
+    "LPEle_iEtaMod5", #(barrel only)
+    "LPEle_iPhiMod2", #(barrel only)
+    "LPEle_iEtaMod20", #(barrel only)
+    "LPEle_iPhiMod20", #(barrel only)
     "LPEle_rawESEnergy", #(endcap only)
     "LPEle_isAlsoPF"
 ]
@@ -63,6 +63,8 @@ aux = [
 
 
 data = load_data(datasets)
-data = weights_and_merge(data, balance_year=True, balance_genpt=True)
+data = weights_and_merge(data, balance_year=True, balance_genpt="splitted")
 df = convert_to_df(data, columns=features+aux)
-df.to_pickle("../data/full_data.pkl")
+df.to_pickle("../data/full_data_splitted_w.pkl")
+
+#%%
