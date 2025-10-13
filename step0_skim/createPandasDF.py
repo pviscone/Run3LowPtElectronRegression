@@ -51,6 +51,8 @@ features = [
 
 aux = [
     "LPEle_target",
+    "LPEle_Gen_pt",
+    "LPEle_Gen_eta",
     "LPEle_isEB",
     "LPEle_pt",
     "LPEle_phi",

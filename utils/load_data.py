@@ -19,6 +19,9 @@ def load_data( datasets_dict, columns=None, genpt="GenEle_pt", genidx="LPEle_Gen
         arrays["LPEle_year"] = ak.ones_like(arrays[pt]) * float(year)
         if genpt:
             arrays["LPEle_target"] = arrays[genpt][arrays[genidx]] / arrays[pt]
+            arrays["LPEle_Gen_pt"] = arrays[genpt][arrays[genidx]]
+            arrays["LPEle_Gen_eta"] = arrays["GenEle_eta"][arrays[genidx]]
+            arrays["LPEle_Gen_phi"] = arrays["GenEle_phi"][arrays[genidx]]
         final_dict[year] = arrays
     return final_dict
 
