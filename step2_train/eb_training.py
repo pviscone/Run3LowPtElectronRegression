@@ -39,7 +39,7 @@ features = [
     "LPEle_iEtaMod20", #(barrel only)
     "LPEle_iPhiMod20", #(barrel only)
     #"LPEle_rawESEnergy", (endcap only)
-    "LPEle_isAlsoPF"
+    #"LPEle_isAlsoPF"
 ]
 
 
