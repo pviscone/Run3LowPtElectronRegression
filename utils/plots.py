@@ -66,6 +66,8 @@ def response_resolution(df,
     for eta_min, eta_max in zip(eta_bins[:-1], eta_bins[1:]):
         if plot_distributions:
             os.makedirs(f"{savefolder}/distributions", exist_ok=True)
+        os.makedirs(f"{savefolder}/response", exist_ok=True)
+        os.makedirs(f"{savefolder}/resolution", exist_ok=True)
         mask = (eta >= eta_min) & (eta < eta_max)
         genpt_eta = genpt[mask]
         centers={key:np.array([]) for key in ptratio_dict.keys()}
@@ -159,7 +161,6 @@ def response_resolution(df,
         fig.savefig(f"{savefolder}/response/aresponse_eta_{str(eta_min).replace('.','')}_{str(eta_max).replace('.','')}.png")
         plt.close(fig)
 
-        os.makedirs(f"{savefolder}/resolution", exist_ok=True)
         fig, ax = plt.subplots()
         ax.axhline(0, color='black', linestyle=':', alpha=0.3)
         ax.set_xlabel("$p_{T}^{\\text{Gen}}$ [GeV]")
