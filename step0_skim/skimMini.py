@@ -97,7 +97,7 @@ if not args.data:
         "GenElectronMatcher",
         src1=cms.InputTag("extendedLPEle"),
         src2=cms.InputTag("selectedGenPart"),
-        dRmax=cms.double(0.1),
+        dRmax=cms.double(0.05),
         storeUnmatched=cms.bool(args.storeUnmatched),
         varLabel=cms.string("Gen"),
     )
@@ -106,7 +106,7 @@ if not args.data:
         "GenElectronMatcher",
         src1=cms.InputTag("extendedPFEle"),
         src2=cms.InputTag("selectedGenPart"),
-        dRmax=cms.double(0.1),
+        dRmax=cms.double(0.05),
         storeUnmatched=cms.bool(args.storeUnmatched),
         varLabel=cms.string("Gen"),
     )
@@ -117,7 +117,7 @@ process.extendedLPEleMatchedToPF = cms.EDProducer(
     "ElectronMatcher",
     src1=cms.InputTag(LPsource),
     src2=cms.InputTag(PFsource),
-    dRmax=cms.double(0.1),
+    dRmax=cms.double(0.05),
     storeUnmatched=cms.bool(True),
     varLabel=cms.string("PF"),
 )
@@ -127,7 +127,7 @@ process.extendedPFEleMatchedToLP = cms.EDProducer(
     "ElectronMatcher",
     src1=cms.InputTag(PFsource),
     src2=cms.InputTag(LPsource),
-    dRmax=cms.double(0.1),
+    dRmax=cms.double(0.05),
     storeUnmatched=cms.bool(True),
     varLabel=cms.string("LP"),
 )
@@ -217,6 +217,33 @@ vars = cms.PSet(
         float,
         doc="Preshower energy / supercluster raw energy (EE only)",
     ),
+
+    ecalDrivenSeed =LazyVar(
+        "userFloat('ecalDrivenSeed')",
+        float,
+        doc="Ecal driven seed",
+    ),
+
+    Tk_p=LazyVar(
+        "userFloat('Tk_p')",
+        float,
+        doc="Gsf track momentum",
+    ),
+    Tk_eta=LazyVar(
+        "userFloat('Tk_eta')",
+        float,
+        doc="Gsf track eta",
+    ),
+    Tk_fbrem=LazyVar(
+        "userFloat('Tk_fbrem')",
+        float,
+        doc="Gsf track fbrem",
+    ),
+    Tk_errPRatio=LazyVar(
+        "userFloat('Tk_errPRatio')",
+        float,
+        doc="Gsf track momentum error / momentum",
+    ),
 )
 
 process.LPEleTable = cms.EDProducer(
@@ -298,6 +325,7 @@ if not args.data:
         singleton=cms.bool(False),
         extension=cms.bool(False),
         variables=cms.PSet(
+            p=LazyVar("p", float),
             pt=LazyVar("pt", float),
             eta=LazyVar("eta", float),
             phi=LazyVar("phi", float),

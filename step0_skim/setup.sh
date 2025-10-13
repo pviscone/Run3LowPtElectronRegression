@@ -8,7 +8,7 @@ fi
 #Check if env var CMSSW_BASE is set
 if [ -z "$CMSSW_BASE" ]; then
     cd CMSSW_15_0_7/src
-    cmsenv
+    scramv1 runtime -sh
     cd ../..
 fi
 

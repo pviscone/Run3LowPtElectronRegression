@@ -26,6 +26,7 @@ public:
       auto seed = sc->seed();
       auto full5x5 = Ele.full5x5_showerShape();
       double e5x5_inverse = Ele.full5x5_showerShape().e5x5 != 0. ? vdt::fast_inv(Ele.full5x5_showerShape().e5x5) : 0.;
+      auto gsfTrk = ele.gsfTrack();
 
 
       //! NEW Vars here
@@ -55,6 +56,16 @@ public:
       Ele.addUserInt("nSaturatedXtals", Ele.nSaturatedXtals());
       Ele.addUserInt("numberOfClusters", std::max(0, int(sc->clusters().size())));
 
+      Ele.addUserFloat("ecalDrivenSeed", Ele.ecalDrivenSeed());
+      //!gsf track vars
+      const float trkP = gsfTrk->pMode();
+      const float trkEta = gsfTrk->etaMode();
+      const float trkPErr = std::abs(gsfTrk->qoverpModeError()) * trkP * trkP;
+      const float fbrem = ele.fbrem();
+      Ele.addUserFloat("Tk_p", trkP);
+      Ele.addUserFloat("Tk_eta", trkEta);
+      Ele.addUserFloat("Tk_fbrem", fbrem);
+      Ele.addUserFloat("Tk_errPRatio", trkPErr / trkP);
 
       if (Ele.isEB()){
         EBDetId detId((*seed).seed());
@@ -66,7 +77,7 @@ public:
                                     (detId.ieta() - (detId.ieta() > 0 ? +1 : -1)) % 20 :
                                     (detId.ieta() - (detId.ieta() > 0 ? +26 : -26)) % 20));
         Ele.addUserInt("iPhiMod20", (detId.iphi() - 1) % 20);
-        Ele.addUserFloat("rawESEnergy", -999.);
+        Ele.addUserFloat("rawESEnergy", 0.);
 
       } else{
         EEDetId detId((*seed).seed());
