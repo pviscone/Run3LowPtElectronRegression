@@ -13,7 +13,7 @@ datasets = {
     "2022" : "../data/dataset2022.root",
 }
 
-features = [
+vars = [
     "LPEle_rawEnergy",
     "LPEle_etaWidth",
     "LPEle_phiWidth",
@@ -46,12 +46,19 @@ features = [
     "LPEle_iEtaMod20", #(barrel only)
     "LPEle_iPhiMod20", #(barrel only)
     "LPEle_rawESEnergy", #(endcap only)
-    "LPEle_isAlsoPF"
-]
-
-aux = [
-    "LPEle_target",
+    "LPEle_ecalDrivenSeed",
+    "LPEle_Tk_p",
+    "LPEle_Tk_eta",
+    "LPEle_Tk_fbrem",
+    "LPEle_Tk_errPRatio",
+    #Aux
+    "LPEle_caloTkRatio",
+    "LPEle_energy",
+    "LPEle_isAlsoPF",
+    "LPEle_caloTarget",
+    "LPEle_tkTarget",
     "LPEle_Gen_pt",
+    "LPEle_Gen_p",
     "LPEle_Gen_eta",
     "LPEle_isEB",
     "LPEle_pt",
@@ -66,7 +73,7 @@ aux = [
 
 data = load_data(datasets)
 data = weights_and_merge(data, balance_year=True, balance_genpt="splitted")
-df = convert_to_df(data, columns=features+aux)
+df = convert_to_df(data, columns=vars)
 df.to_pickle("../data/full_data_splitted_w.pkl")
 
 #%%
