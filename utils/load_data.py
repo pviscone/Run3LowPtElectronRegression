@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 import hist
 
-def load_data( datasets_dict, columns=None, genpt="GenEle_pt", genidx="LPEle_GenIdx" ,pt="LPEle_pt", n = -1):
+def load_data( datasets_dict, columns=None, gen=True, genidx="LPEle_GenIdx" , n = -1):
     final_dict = {}
     for year, dataset in datasets_dict.items():
         tree = uproot.open(dataset)["Events"]
@@ -16,10 +16,16 @@ def load_data( datasets_dict, columns=None, genpt="GenEle_pt", genidx="LPEle_Gen
         arrays = tree.arrays(keys)
         if n>0:
             arrays = arrays[:n]
-        arrays["LPEle_year"] = ak.ones_like(arrays[pt]) * float(year)
-        if genpt:
-            arrays["LPEle_target"] = arrays[genpt][arrays[genidx]] / arrays[pt]
-            arrays["LPEle_Gen_pt"] = arrays[genpt][arrays[genidx]]
+        arrays["LPEle_year"] = ak.ones_like(arrays[genidx]) * float(year)
+        arrays["LPEle_energy"] = arrays["LPEle_rawEnergy"] + arrays["LPEle_rawESEnergy"]
+        arrays["LPEle_caloTkRatio"] = arrays["LPEle_energy"]/arrays["LPEle_Tk_p"]
+
+        if gen:
+            gen_p = arrays["GenEle_p"][arrays[genidx]]
+            arrays["LPEle_caloTarget"] = gen_p / arrays["LPEle_energy"]
+            arrays["LPEle_tkTarget"] = gen_p / arrays["LPEle_Tk_p"]
+            arrays["LPEle_Gen_p"] = gen_p
+            arrays["LPEle_Gen_pt"] = arrays["GenEle_pt"][arrays[genidx]]
             arrays["LPEle_Gen_eta"] = arrays["GenEle_eta"][arrays[genidx]]
             arrays["LPEle_Gen_phi"] = arrays["GenEle_phi"][arrays[genidx]]
         final_dict[year] = arrays
@@ -49,7 +55,7 @@ def weights_and_merge(arrays_dict, balance_year=True, balance_genpt="splitted", 
             elif isinstance(bins, list) or isinstance(bins, tuple):
                 bins = np.linspace(bins[1], bins[2], bins[0])
 
-            getpt_hist = hist.Hist(hist.axis.Variable(bins, name="gen_pt", label="gen_pt"))
+            getp_hist = hist.Hist(hist.axis.Variable(bins, name="gen_pt", label="gen_pt"))
             pt_hist = hist.Hist(hist.axis.Variable(bins, name="genmatch_pt", label="genmatch_pt"))
             unbalance_hist = hist.Hist(hist.axis.Variable(bins, name="gen_pt", label="gen_pt"))
             unbalance_hist.fill(bins)
@@ -60,9 +66,9 @@ def weights_and_merge(arrays_dict, balance_year=True, balance_genpt="splitted", 
                 selector = eval(selection)
             pt = ak.flatten(arrays[genpt][gen_idx]).to_numpy()
             gen_pt = ak.flatten(arrays[genpt]).to_numpy()
-            getpt_hist.fill(gen_pt)
+            getp_hist.fill(gen_pt)
             pt_hist.fill(pt)
-            eff_hist = pt_hist/getpt_hist.values()
+            eff_hist = pt_hist/getp_hist.values()
             unbalance_hist = unbalance_hist/(eff_hist/eff_hist.integrate(0)).values()
 
             pt_weights=get_h(unbalance_hist.values(), unbalance_hist.axes[0].edges, ak.ravel(pt).to_numpy())
