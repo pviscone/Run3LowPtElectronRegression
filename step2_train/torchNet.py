@@ -48,29 +48,22 @@ def get_loss(beta=None, metric="L2"):
 
             def l2_loss(targets, outputs, sample_weight=None):
                 mu = outputs[..., 0:1]
-                # var = transform(outputs[..., 1:2], numpy=False)
-                var = outputs[..., 1:2]
+                var = variance_transformation(outputs[..., 1:2], numpy=False)
                 y = targets[..., 0:1]
-                loglik = -0.5 * torch.log(2 * torch.pi * var) - ((y - mu) ** 2) / (
-                    2 * var
-                )
+                loglik = -torch.log(var) - ((y - mu) ** 2) / var
                 if sample_weight is not None:
                     loglik = loglik * sample_weight.unsqueeze(-1)
                 return -loglik.mean()
-
             return l2_loss
         elif metric == "L1":
-
             def l1_loss(targets, outputs, sample_weight=None):
                 mu = outputs[..., 0:1]
-                # var = transform(outputs[..., 1:2], numpy=False)
-                sigma = outputs[..., 1:2]
+                sigma = variance_transformation(outputs[..., 1:2], numpy=False)
                 y = targets[..., 0:1]
-                loglik = -torch.log(2 * sigma) - torch.abs(y - mu) / sigma
+                loglik = -torch.log(sigma) - (torch.abs(y - mu)) / sigma
                 if sample_weight is not None:
                     loglik = loglik * sample_weight.unsqueeze(-1)
                 return -loglik.mean()
-
             return l1_loss
         else:
             raise ValueError(f"Unknown metric: {metric}")
@@ -150,6 +143,7 @@ class MVENetwork:
         dropout_mean=0,
         dropout_var=0,
         device=None,
+        metric = "L2",
     ):
         self._normalization = False
         self.model_kwargs = {
@@ -161,6 +155,7 @@ class MVENetwork:
             "dropout_common": dropout_common,
             "dropout_mean": dropout_mean,
             "dropout_var": dropout_var,
+            "metric": metric,
         }
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.model = MVENet(
@@ -176,6 +171,7 @@ class MVENetwork:
         self.train_loss = []
         self.val_loss = []
         self.fit_kwargs = []
+        self.metric = metric
 
     def init_variance(self, X_train, Y_train):
         # Set variance branch output bias to logmse
@@ -189,14 +185,14 @@ class MVENetwork:
                 device=self.model.var_branch[-1].bias.device,
             )
 
-    def normalize(self, X, Y, metric="L2"):
+    def normalize(self, X, Y):
         self._normalization = True
         self._X_mean = np.mean(X, axis=0)
         self._X_std = np.std(X, axis=0)
-        if metric == "L2":
+        if self.metric == "L2":
             self._Y_mean = np.mean(Y, axis=0)
             self._Y_std = np.std(Y, axis=0)
-        elif metric == "L1":
+        elif self.metric == "L1":
             self._Y_mean = np.median(Y, axis=0)
             self._Y_std = np.mean(np.abs(Y - self._Y_mean))
 
@@ -217,7 +213,7 @@ class MVENetwork:
             else:
                 return predictions
 
-    def sigma(self, X_test, metric="L2"):
+    def sigma(self, X_test):
         """Return the standard deviation prediction"""
         if X_test.ndim == 1:
             X_test = X_test[:, None]
@@ -228,15 +224,15 @@ class MVENetwork:
         self.model.eval()
         with torch.no_grad():
             predictions = self.model(X_test).cpu().numpy()[:, 1]
-            # predictions = np.sqrt(variance_transformation(predictions, numpy=True))
+            predictions = variance_transformation(predictions, numpy=True)
             _ = gc.collect()
+            if self.metric == "L2":
+                predictions = np.sqrt(predictions)
+            elif self.metric == "L1":
+                predictions = np.sqrt(2) * predictions
             if self._normalization:
                 predictions = predictions * self._Y_std
-
-            if metric == "L2":
-                return np.sqrt(predictions)
-            elif metric == "L1":
-                return np.sqrt(2) * predictions
+            return predictions
 
     def save(self, path):
         os.makedirs(path, exist_ok=True)
@@ -302,7 +298,6 @@ class MVENetwork:
         reg_common=0,
         reg_mean=0,
         reg_var=0,
-        metric="L2",
     ):
         fit_kwarg = {
             "beta": beta,
@@ -315,7 +310,6 @@ class MVENetwork:
             "reg_common": reg_common,
             "reg_mean": reg_mean,
             "reg_var": reg_var,
-            "metric": metric,
         }
         self.fit_kwargs.append(fit_kwarg)
         validation = X_val is not None and Y_val is not None
@@ -354,7 +348,7 @@ class MVENetwork:
                 self.device
             )
 
-        loss_fn = get_loss(beta, metric=metric)
+        loss_fn = get_loss(beta, metric=self.metric)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=learn_rate)
 
         def run_epoch(X, Y, W=None):
