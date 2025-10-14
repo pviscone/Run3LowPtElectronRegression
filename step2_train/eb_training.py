@@ -34,6 +34,7 @@ model = MVENetwork(
     n_hidden_common=[128],
     n_hidden_mean=[128, 64, 32],
     n_hidden_var=[128, 64, 32],
+    n_hidden_shape=[128, 64, 32],
     metric = "L1"
 )
 
@@ -49,7 +50,8 @@ model.train(
     learn_rate=1e-3,
     warmup=0,
     n_epochs=140,
-    reg_var=0.0,
+    reg_shape=1e-3,
+    reg_var=1e-3,
     fixed_mean=False,
     verbose=True,
 )

@@ -56,11 +56,15 @@ def get_loss(beta=None, metric="L2"):
                 return -loglik.mean()
             return l2_loss
         elif metric == "L1":
-            def l1_loss(targets, outputs, sample_weight=None):
+            def l1_loss(targets, outputs, sample_weight=None, shape=None):
                 mu = outputs[..., 0:1]
                 sigma = variance_transformation(outputs[..., 1:2], numpy=False)
                 y = targets[..., 0:1]
-                loglik = -torch.log(sigma) - (torch.abs(y - mu)) / sigma
+                if shape is not None:
+                    k = variance_transformation(outputs[..., 2:3], numpy=False)
+                    loglik = -torch.log(sigma) -torch.log(k) + torch.log(1+torch.pow(k,2)) - (torch.abs(y - mu))*torch.pow(k, torch.sign(y-mu)) / sigma
+                else:
+                    loglik = -torch.log(sigma) - (torch.abs(y - mu)) / sigma
                 if sample_weight is not None:
                     loglik = loglik * sample_weight.unsqueeze(-1)
                 return -loglik.mean()
@@ -76,12 +80,14 @@ class MVENet(nn.Module):
         n_hidden_common,
         n_hidden_mean,
         n_hidden_var,
+        n_hidden_shape = None,
         dropout_input=0,
         dropout_common=0,
         dropout_mean=0,
         dropout_var=0,
     ):
         super().__init__()
+        self.has_shape = n_hidden_shape is not None
 
         self.input_shape = input_shape
         layers = []
@@ -123,11 +129,25 @@ class MVENet(nn.Module):
         var_layers.append(nn.Linear(var_in, 1))
         self.var_branch = nn.Sequential(*var_layers)
 
+        if n_hidden_shape is not None:
+            shape_layers = []
+            shape_in = in_features
+            for n in n_hidden_shape:
+                shape_layers.append(nn.Linear(shape_in, n))
+                shape_layers.append(nn.ELU())
+                shape_in = n
+            shape_layers.append(nn.Linear(shape_in, 2))
+            self.shape_branch = nn.Sequential(*shape_layers)
+
     def forward(self, x):
         inter = self.common(x)
         mean_out = self.mean_branch(inter)
         var_out = self.var_branch(inter)
-        return torch.cat([mean_out, var_out], dim=-1)
+        out = [mean_out, var_out]
+        if self.has_shape:
+            shape_out = self.shape_branch(inter)
+            out.append(shape_out)
+        return torch.cat(out, dim=-1)
 
 
 class MVENetwork:
@@ -138,6 +158,7 @@ class MVENetwork:
         n_hidden_common,
         n_hidden_mean,
         n_hidden_var,
+        n_hidden_shape = None,
         dropout_input=0,
         dropout_common=0,
         dropout_mean=0,
@@ -151,6 +172,7 @@ class MVENetwork:
             "n_hidden_common": n_hidden_common,
             "n_hidden_mean": n_hidden_mean,
             "n_hidden_var": n_hidden_var,
+            "n_hidden_shape": n_hidden_shape,
             "dropout_input": dropout_input,
             "dropout_common": dropout_common,
             "dropout_mean": dropout_mean,
@@ -163,6 +185,7 @@ class MVENetwork:
             n_hidden_common=n_hidden_common,
             n_hidden_mean=n_hidden_mean,
             n_hidden_var=n_hidden_var,
+            n_hidden_shape = n_hidden_shape,
             dropout_input=dropout_input,
             dropout_common=dropout_common,
             dropout_mean=dropout_mean,
@@ -172,6 +195,7 @@ class MVENetwork:
         self.val_loss = []
         self.fit_kwargs = []
         self.metric = metric
+        self.has_shape = n_hidden_shape is not None
 
     def init_variance(self, X_train, Y_train):
         # Set variance branch output bias to logmse
@@ -223,16 +247,21 @@ class MVENetwork:
 
         self.model.eval()
         with torch.no_grad():
-            predictions = self.model(X_test).cpu().numpy()[:, 1]
-            predictions = variance_transformation(predictions, numpy=True)
+            out = self.model(X_test).cpu().numpy()
+            var = variance_transformation(out[:, 1], numpy=True)
             _ = gc.collect()
             if self.metric == "L2":
-                predictions = np.sqrt(predictions)
+                sigma = np.sqrt(var)
             elif self.metric == "L1":
-                predictions = np.sqrt(2) * predictions
+                if not self.has_shape:
+                    sigma = np.sqrt(2) * var
+                else:
+                    k = variance_transformation(out[:, 2], numpy=True)
+                    sigma = np.sqrt(var*(1+k**4)/(k**2))
+
             if self._normalization:
-                predictions = predictions * self._Y_std
-            return predictions
+                sigma = sigma * self._Y_std
+            return sigma
 
     def save(self, path):
         os.makedirs(path, exist_ok=True)
@@ -298,6 +327,7 @@ class MVENetwork:
         reg_common=0,
         reg_mean=0,
         reg_var=0,
+        reg_shape=0,
     ):
         fit_kwarg = {
             "beta": beta,
@@ -310,6 +340,7 @@ class MVENetwork:
             "reg_common": reg_common,
             "reg_mean": reg_mean,
             "reg_var": reg_var,
+            "reg_shape": reg_shape,
         }
         self.fit_kwargs.append(fit_kwarg)
         validation = X_val is not None and Y_val is not None
@@ -370,6 +401,8 @@ class MVENetwork:
                 l2_mean = reg_mean * get_l2_reg(self.model.mean_branch)
                 l2_var = reg_var * get_l2_reg(self.model.var_branch)
                 full_loss = loss + l2_common + l2_mean + l2_var
+                if self.has_shape is not None:
+                    full_loss += reg_shape * get_l2_reg(self.model.shape_branch)
                 full_loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item() * xb.size(0)
@@ -403,6 +436,9 @@ class MVENetwork:
         # Warmup: freeze variance branch, train only mean
         for param in self.model.var_branch.parameters():
             param.requires_grad = False
+        if self.has_shape is not None:
+            for param in self.model.shape_branch.parameters():
+                param.requires_grad = False
         for epoch in range(warmup):
             train_loss = run_epoch(X_train, Y_train, sample_weight)
             self.train_loss.append(train_loss)
@@ -424,6 +460,9 @@ class MVENetwork:
         # Unfreeze variance branch
         for param in self.model.var_branch.parameters():
             param.requires_grad = True
+        if self.has_shape is not None:
+            for param in self.model.shape_branch.parameters():
+                param.requires_grad = True
         # Freeze mean branch if fixed_mean
         if fixed_mean:
             for param in self.model.mean_branch.parameters():
