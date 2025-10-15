@@ -244,6 +244,112 @@ vars = cms.PSet(
         float,
         doc="Gsf track momentum error / momentum",
     ),
+    Tk_validFraction=LazyVar(
+        "userFloat('Tk_validFraction')",
+        float,
+        doc="Gsf track valid fraction",
+    ),
+    Tk_nValidHits=LazyVar(
+        "userInt('Tk_nValidHits')",
+        int,
+        doc="Gsf track number of valid hits",
+    ),
+    Tk_nLostHits=LazyVar(
+        "userInt('Tk_nLostHits')",
+        int,
+        doc="Gsf track number of lost hits",
+    ),
+    Tk_nLostInnerHits=LazyVar(
+        "userInt('Tk_nLostInnerHits')",
+        int,
+        doc="Gsf track number of lost inner hits",
+    ),
+    Tk_nLostOuterHits=LazyVar(
+        "userInt('Tk_nLostOuterHits')",
+        int,
+        doc="Gsf track number of lost outer hits",
+    ),
+    nOfBrems=LazyVar(
+        "userInt('nOfBrems')",
+        int,
+        doc="Number of brems",
+    ),
+    superClusterFBrem=LazyVar(
+        "userFloat('superClusterFBrem')",
+        float,
+        doc="Supercluster fbrem",
+    ),
+    Tk_chi2=LazyVar(
+        "userFloat('Tk_chi2')",
+        float,
+        doc="Gsf track chi2",
+    ),
+    Tk_charge=LazyVar(
+        "userFloat('Tk_charge')",
+        float,
+        doc="Gsf track charge",
+    ),
+    Tk_qoverp=LazyVar(
+        "userFloat('Tk_qoverp')",
+        float,
+        doc="Gsf track qoverp",
+    ),
+    Tk_dEtaEleClusterAtCalo=LazyVar(
+        "userFloat('Tk_dEtaEleClusterAtCalo')",
+        float,
+        doc="Delta eta between Gsf track and ele cluster at calo",
+    ),
+    Tk_dPhiEleClusterAtCalo=LazyVar(
+        "userFloat('Tk_dPhiEleClusterAtCalo')",
+        float,
+        doc="Delta phi between Gsf track and ele cluster at calo",
+    ),
+    Tk_dEtaSuperClusterAtVtx=LazyVar(
+        "userFloat('Tk_dEtaSuperClusterAtVtx')",
+        float,
+        doc="Delta eta between Gsf track and supercluster at vertex",
+    ),
+    Tk_dPhiSuperClusterAtVtx=LazyVar(
+        "userFloat('Tk_dPhiSuperClusterAtVtx')",
+        float,
+        doc="Delta phi between Gsf track and supercluster at vertex",
+    ),
+    Tk_dEtaSeedClusterAtCalo=LazyVar(
+        "userFloat('Tk_dEtaSeedClusterAtCalo')",
+        float,
+        doc="Delta eta between Gsf track and seed cluster at calo",
+    ),
+    Tk_dPhiSeedClusterAtCalo=LazyVar(
+        "userFloat('Tk_dPhiSeedClusterAtCalo')",
+        float,
+        doc="Delta phi between Gsf track and seed cluster at calo",
+    ),
+    Tk_dEtaSeedClusterAtVtx=LazyVar(
+        "userFloat('Tk_dEtaSeedClusterAtVtx')",
+        float,
+        doc="Delta eta between Gsf track and seed cluster at vertex",
+    ),
+    Tk_eSuperClusterOverP=LazyVar(
+        "userFloat('Tk_eSuperClusterOverP')",
+        float,
+        doc="E supercluster over Gsf track momentum",
+    ),
+    Tk_eSeedClusterOverP=LazyVar(
+        "userFloat('Tk_eSeedClusterOverP')",
+        float,
+        doc="E seed cluster over Gsf track momentum",
+    ),
+    Tk_eSeedClusterOverPout=LazyVar(
+        "userFloat('Tk_eSeedClusterOverPout')",
+        float,
+        doc="E seed cluster over Gsf track momentum at calorimeter",
+    ),
+    Tk_eEleClusterOverPout=LazyVar(
+        "userFloat('Tk_eEleClusterOverPout')",
+        float,
+        doc="E ele cluster over Gsf track momentum at calorimeter",
+    ),
+
 )
 
 process.LPEleTable = cms.EDProducer(

@@ -67,6 +67,33 @@ public:
       Ele.addUserFloat("Tk_fbrem", fbrem);
       Ele.addUserFloat("Tk_errPRatio", trkPErr / trkP);
 
+      Ele.addUserFloat("Tk_validFraction", gsfTrk->validFraction());
+      Ele.addUserInt("Tk_nValidHits", gsfTrk->numberOfValidHits());
+      Ele.addUserInt("Tk_nLostHits", gsfTrk->numberOfLostHits());
+      Ele.addUserInt("Tk_nLostInnerHits", gsfTrk->hitPattern().numberOfLostHits(reco::HitPattern::MISSING_INNER_HITS));
+      Ele.addUserInt("Tk_nLostOuterHits", gsfTrk->hitPattern().numberOfLostHits(reco::HitPattern::MISSING_OUTER_HITS));
+
+      Ele.addUserInt("nOfBrems", ele.numberOfBrems());
+      Ele.addUserFloat("superClusterFBrem", ele.superClusterFbrem());
+
+      Ele.addUserFloat("Tk_chi2", gsfTrk->normalizedChi2());
+      Ele.addUserFloat("Tk_charge", gsfTrk->chargeMode());
+      Ele.addUserFloat("Tk_qoverp", gsfTrk->qoverpMode());
+
+
+      Ele.addUserFloat("Tk_dEtaEleClusterAtCalo", ele.deltaEtaEleClusterTrackAtCalo());
+      Ele.addUserFloat("Tk_dPhiEleClusterAtCalo", ele.deltaPhiEleClusterTrackAtCalo());
+      Ele.addUserFloat("Tk_dEtaSuperClusterAtVtx", ele.deltaEtaSuperClusterTrackAtVtx());
+      Ele.addUserFloat("Tk_dPhiSuperClusterAtVtx", ele.deltaPhiSuperClusterTrackAtVtx());
+      Ele.addUserFloat("Tk_dEtaSeedClusterAtCalo", ele.deltaEtaSeedClusterTrackAtCalo());
+      Ele.addUserFloat("Tk_dPhiSeedClusterAtCalo", ele.deltaPhiSeedClusterTrackAtCalo());
+      Ele.addUserFloat("Tk_dEtaSeedClusterAtVtx", ele.deltaEtaSeedClusterTrackAtVtx());
+      Ele.addUserFloat("Tk_eSuperClusterOverP", ele.eSuperClusterOverP());
+      Ele.addUserFloat("Tk_eSeedClusterOverP", ele.eSeedClusterOverP());
+      Ele.addUserFloat("Tk_eSeedClusterOverPout", ele.eSeedClusterOverPout());
+      Ele.addUserFloat("Tk_eEleClusterOverPout", ele.eEleClusterOverPout());
+
+
       if (Ele.isEB()){
         EBDetId detId((*seed).seed());
         Ele.addUserInt("iEtaOrX", detId.ieta());
