@@ -1,6 +1,6 @@
 # %%
 import pandas as pd
-from torchNet import MVENetwork
+from MVENet.SingleMVENet import SingleMVENet
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
 import mplhep as hep
@@ -29,29 +29,27 @@ Y_val = df_test["LPEle_caloTarget"].to_numpy()
 
 
 # %%
-model = MVENetwork(
+
+model = SingleMVENet(
     input_shape=len(features_eb),
-    n_hidden_common=[128],
-    n_hidden_mean=[128, 64, 32],
-    n_hidden_var=[128, 64, 32],
-    metric = "L1"
+    n_hidden_common=[512, 256, 128],
+    n_hidden_mean=[128, 128,64,32],
+    n_hidden_var=[128, 128,64,32],
+    loss = "L1Loss"
 )
 
 model.normalize(X_train, Y_train)
-model.train(
+model.train_model(
     X_train,
     Y_train,
     sample_weight=w,
     X_val=X_val,
     Y_val=Y_val,
-    beta=None,
     batch_size=10280,
     learn_rate=1e-3,
-    warmup=0,
     n_epochs=80,
     reg_var=1e-3,
     reg_mean=1e-4,
-    fixed_mean=False,
     verbose=True,
 )
 
@@ -59,15 +57,15 @@ model.train(
 model.save("model_eb")
 # %%
 fig, ax = plt.subplots()
-ax.plot(model.train_loss, label="train")
+ax.plot(model.train_loss.loss_total, label="train")
 if hasattr(model, "val_loss"):
-    ax.plot(model.val_loss, label="val")
+    ax.plot(model.val_loss.loss_total, label="val")
 ax.set_xlabel("Epoch")
 ax.set_ylabel("Loss")
 ax.legend()
 fig.savefig("plots_eb/loss_eb.pdf")
 # %%
-model = MVENetwork.load("model_eb")
+model = SingleMVENet.load("model_eb")
 
 #%%
 import sys
