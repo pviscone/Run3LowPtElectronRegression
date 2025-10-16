@@ -53,6 +53,7 @@ def response_resolution(df,
                                eta_bins = None,
                                genp_bins = None,
                                plot_distributions = False,
+                               lab = "p",
                                savefolder = "plots",):
     os.makedirs(savefolder, exist_ok=True)
     if eta_bins is None:
@@ -113,7 +114,7 @@ def response_resolution(df,
 
                     ax.axvline(1, color='black', alpha=0.3)
                     ax.set_title(f"$| \eta |$: [{eta_min},{eta_max}], GenP: [{genp_min},{genp_max}]")
-                    ax.set_xlabel("Reco $p$ / $p^{\\text{Gen}}$")
+                    ax.set_xlabel(f"Reco ${lab}$"+"/ $p^{\\text{Gen}}$")
                     ax.set_ylabel("Density")
                     ax.legend(fontsize=15)
                     h = hist.Hist(hist.axis.Regular(29, 0.3, 1.7, name="pratio", label="Reco $p$ / $p^{\\text{Gen}}$"))
@@ -139,8 +140,8 @@ def response_resolution(df,
         fig, ax = plt.subplots()
         ax.axhline(1, color='gray', linestyle='-', alpha=0.5, zorder=99)
         ax.text(0, 1.3, f"${eta_min}< | \eta | < {eta_max}$")
-        ax.set_xlabel("$p^{\\text{Gen}}$ [GeV]")
-        ax.set_ylabel("$p^{\\text{Reco}}$ / $p^{\\text{Gen}}$")
+        ax.set_xlabel(f"${lab}"+"^{\\text{Gen}}$ [GeV]")
+        ax.set_ylabel(f"${lab}"+"^{\\text{Reco}}$ / "+ f"${lab}" +"^{\\text{Gen}}$")
         for idx, label in enumerate(pratio_dict.keys()):
             diff = centers[label][1:]-centers[label][:-1]
             diff = np.append(diff, diff[-1])
@@ -160,7 +161,7 @@ def response_resolution(df,
                      [labels[idx] for idx in legend_order],
                      fontsize=20, loc='lower right')
         ax.set_ylim(0.3,1.4)
-        ax.set_xlabel("$p^{\\text{Gen}}$ [GeV]")
+        ax.set_xlabel(f"${lab}"+"^{\\text{Gen}}$ [GeV]")
         hep.cms.text("Preliminary", ax=ax, loc=0, fontsize=22)
         #hep.cms.lumitext("PU 0-70 (13.6 TeV)", ax=ax[0], fontsize=22)
         fig.savefig(f"{savefolder}/response/aresponse_eta_{str(eta_min).replace('.','')}_{str(eta_max).replace('.','')}.pdf")
@@ -169,8 +170,8 @@ def response_resolution(df,
 
         fig, ax = plt.subplots()
         ax.axhline(0, color='black', linestyle=':', alpha=0.3)
-        ax.set_xlabel("$p^{\\text{Gen}}$ [GeV]")
-        ax.set_ylabel("$\sigma_{eff}$($p^{\\text{Reco}}$ / $p^{\\text{Gen}}$)")
+        ax.set_xlabel(f"${lab}"+"^{\\text{Gen}}$ [GeV]")
+        ax.set_ylabel("$\sigma_{eff}$($p^{\\text{Reco}}$ / "+f"${lab}"+"^{\\text{Gen}}$)")
         for idx, label in enumerate(pratio_dict.keys()):
             width = (perc84s[label] - perc16s[label])# / centers[eta_idx][label]
             diff=(centers[label][1:]-centers[label][:-1])/2
