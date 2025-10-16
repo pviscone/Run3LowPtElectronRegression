@@ -23,9 +23,6 @@ class LossRecord:
 
 
 
-
-#TODO REMEMBER TO APPLY THE MEAN LATER
-#TODO Apply sample weight directly in the train method
 class Loss(ABC):
     @abstractmethod
     def loss(self):
@@ -122,34 +119,43 @@ class L1Loss(Loss):
 class BivariateL2(Loss):
     def __init__(self, **kwargs):
         self.n_out = 5
-        self.activations = ["Linear", "Linear", "Linear", "Linear", "Sigmoid"]
+        self.activations = ["Linear", "Linear", "Linear", "Linear", "Tanh"]
         self.n_targets = 2
 
+    #outputs: mu1, log sigma1, mu2, log sigma2, rho
     def loss(self, targets, outputs):
         y1 = targets[..., 0:1]
         y2 = targets[..., 1:2]
 
         mu1 = outputs[..., 0:1]
-        var1 = variance_transformation(outputs[..., 1:2], numpy=False)
-        sigma1 = torch.sqrt(var1)
+        logsigma1 = outputs[..., 1:2]
+        sigma1 = variance_transformation(logsigma1, numpy=False)
 
         mu2 = outputs[..., 2:3]
-        var2 = variance_transformation(outputs[..., 3:4], numpy=False)
-        sigma2 = torch.sqrt(var2)
+        logsigma2 = outputs[..., 3:4]
+        sigma2 = variance_transformation(logsigma2, numpy=False)
 
         rho = outputs[..., 4:5]
-        loglik_var = -torch.log(sigma1) - torch.log(sigma2) - 0.5*torch.log(1-torch.pow(rho,2))
-        loglik_mu = - (1/(1-torch.pow(rho,2))) * ( ((y1 - mu1) ** 2) / var1 + ((y2 - mu2) ** 2) / var2 - (2*rho*(y1 - mu1)*(y2 - mu2))/(sigma1*sigma2) )
+        rho = torch.clamp(rho, min=-0.999, max=0.999)
 
-        loglik = loglik_var + loglik_mu
+        z1 = (y1 - mu1) / sigma1
+        z2 = (y2 - mu2) / sigma2
+
+        zSz = ((z1**2) - 2*rho*z1*z2 + (z2**2))/(1-torch.pow(rho,2))
+
+        loglik = - logsigma1 - logsigma2 - 0.5*torch.log1p(-torch.pow(rho,2)) - 0.5 * zSz
         return -loglik
 
 
-    def f(self, outputs):
-        return torch.stack((outputs[:, 0], outputs[:, 2]), axis=1)
 
-    def sigma(self, outputs):
-        return torch.stack((outputs[:, 1], outputs[:, 3]), axis=1)
+    def f(self, outputs, numpy=True):
+        if numpy:
+            return np.stack((outputs[:, 0], outputs[:, 2]), axis=1)
+        else:
+            return torch.stack((outputs[:, 0], outputs[:, 2]), axis=1)
+
+    def sigma(self, outputs, numpy=True):
+        return variance_transformation(outputs[:, [1, 3]],numpy=numpy)
 
     def rho(self, outputs):
         return outputs[:, 4]
@@ -163,35 +169,43 @@ class BivariateL2(Loss):
 class BivariateL1(Loss):
     def __init__(self, **kwargs):
         self.n_out = 5
-        self.activations = ["Linear", "Linear", "Linear", "Linear", "sigmoid"]
+        self.activations = ["Linear", "Linear", "Linear", "Linear", "Tanh"]
         self.n_targets = 2
-        self.l1_loss = L1Loss()
-        self.laplace_cdf = lambda x, mu, sigma : torch.where(((x-mu)/sigma) < 0, 0.5 * torch.exp(((x-mu)/sigma)), 1 - 0.5 * torch.exp(-((x-mu)/sigma)))
 
     def loss(self, targets, outputs):
-        mu1 = outputs[..., 0:1]
-        sigma1 = variance_transformation(outputs[..., 1:2], numpy=False)
-        mu2 = outputs[..., 2:3]
-        sigma2 = variance_transformation(outputs[..., 3:4], numpy=False)
-        rho = outputs[..., 4:5]
-
         y1 = targets[..., 0:1]
         y2 = targets[..., 1:2]
 
-        nll1 = self.l1_loss.loss(y1, outputs[..., 0:2])
-        nll2 = self.l1_loss.loss(y2, outputs[..., 2:4])
+        mu1 = outputs[..., 0:1]
+        logsigma1 = outputs[..., 1:2]
+        sigma1 = variance_transformation(logsigma1, numpy=False)
 
-        z1 = self.laplace_cdf(y1, mu1, sigma1)
-        z2 = self.laplace_cdf(y2, mu2, sigma2)
+        mu2 = outputs[..., 2:3]
+        logsigma2 = outputs[..., 3:4]
+        sigma2 = variance_transformation(logsigma2, numpy=False)
 
-        nll_corr = 0.5*torch.log(1-torch.pow(rho,2)) + rho*z1*z2
-        return nll1 + nll2 + nll_corr
+        rho = outputs[..., 4:5]
+        rho = torch.clamp(rho, min=-0.999, max=0.999)
 
-    def f(self, outputs):
-        return torch.stack((outputs[:, 0], outputs[:, 2]), axis=1)
+        z1 = (y1 - mu1) / sigma1
+        z2 = (y2 - mu2) / sigma2
 
-    def sigma(self, outputs):
-        return np.sqrt(2) * torch.stack((outputs[:, 1], outputs[:, 3]), axis=1)
+        zSz = ((z1**2) - 2*rho*z1*z2 + (z2**2))/(1-torch.pow(rho,2))
+
+        bessel_term = torch.special.modified_bessel_k0(torch.sqrt(2*zSz))
+        bessel_term = torch.clamp(bessel_term, min=1e-15)
+
+        loglik = - logsigma1 - logsigma2 - 0.5*torch.log1p(-torch.pow(rho,2)) + torch.log(bessel_term)
+        return -loglik
+
+    def f(self, outputs, numpy=True):
+        if numpy:
+            return np.stack((outputs[:, 0], outputs[:, 2]), axis=1)
+        else:
+            return torch.stack((outputs[:, 0], outputs[:, 2]), axis=1)
+
+    def sigma(self, outputs, numpy=True):
+        return variance_transformation(outputs[:, [1, 3]],numpy=numpy)
 
     def rho(self, outputs):
         return outputs[:, 4]
@@ -200,7 +214,6 @@ class BivariateL1(Loss):
         Y_mean = np.median(Y, axis=0)
         Y_std = np.mean(np.abs(Y - Y_mean))
         return Y_mean, Y_std
-
 
 
 loss_dictionary = {
