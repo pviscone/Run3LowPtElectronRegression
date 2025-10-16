@@ -1,3 +1,4 @@
+
 # %%
 import pandas as pd
 from MVENet.SingleMVENet import SingleMVENet
@@ -33,9 +34,9 @@ Y_val = df_test["LPEle_caloTarget"].to_numpy()
 model = SingleMVENet(
     input_shape=len(features_eb),
     n_hidden_common=[512, 256, 128],
-    n_hidden_mean=[128, 128,64,32],
-    n_hidden_var=[128, 128,64,32],
-    loss = "L1Loss"
+    n_hidden_mean=[128, 128, 64, 32],
+    n_hidden_var=[128, 128, 64, 32],
+    loss="L1Loss",
 )
 
 model.normalize(X_train, Y_train)
@@ -46,7 +47,7 @@ model.train_model(
     X_val=X_val,
     Y_val=Y_val,
     batch_size=10280,
-    learn_rate=1e-3,
+    learn_rate=1e-4,
     n_epochs=80,
     reg_var=1e-3,
     reg_mean=1e-4,
@@ -67,7 +68,7 @@ fig.savefig("plots_eb/loss_eb.pdf")
 # %%
 model = SingleMVENet.load("model_eb")
 
-#%%
+# %%
 import sys
 
 sys.path.append("..")
