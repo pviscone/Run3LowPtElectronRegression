@@ -14,6 +14,28 @@ datasets = {
 }
 
 vars = [
+    "LPEle_Tk_validFraction",
+    "LPEle_Tk_nValidHits",
+    "LPEle_Tk_nLostHits",
+    "LPEle_Tk_nLostInnerHits",
+    "LPEle_Tk_nLostOuterHits",
+    "LPEle_nOfBrems",
+    "LPEle_superClusterFBrem",
+    "LPEle_Tk_chi2",
+    "LPEle_Tk_charge",
+    "LPEle_Tk_qoverp",
+    "LPEle_Tk_dEtaEleClusterAtCalo",
+    "LPEle_Tk_dPhiEleClusterAtCalo",
+    "LPEle_Tk_dEtaSuperClusterAtVtx",
+    "LPEle_Tk_dPhiSuperClusterAtVtx",
+    "LPEle_Tk_dEtaSeedClusterAtCalo",
+    "LPEle_Tk_dPhiSeedClusterAtCalo",
+    "LPEle_Tk_dEtaSeedClusterAtVtx",
+    "LPEle_Tk_eSuperClusterOverP",
+    "LPEle_Tk_eSeedClusterOverP",
+    "LPEle_Tk_eSeedClusterOverPout",
+    "LPEle_Tk_eEleClusterOverPout",
+
     "LPEle_rawEnergy",
     "LPEle_etaWidth",
     "LPEle_phiWidth",
@@ -75,5 +97,7 @@ data = load_data(datasets)
 data = weights_and_merge(data, balance_year=True, balance_genpt="splitted")
 df = convert_to_df(data, columns=vars)
 df.to_pickle("../data/full_data_splitted_w.pkl")
+
+# %%
 
 #%%
