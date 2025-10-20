@@ -19,6 +19,7 @@ def load_data( datasets_dict, columns=None, gen=True, genidx="LPEle_GenIdx" , n 
         arrays["LPEle_year"] = ak.ones_like(arrays[genidx]) * float(year)
         arrays["LPEle_energy"] = arrays["LPEle_rawEnergy"] + arrays["LPEle_rawESEnergy"]
         arrays["LPEle_caloTkRatio"] = arrays["LPEle_energy"]/arrays["LPEle_Tk_p"]
+        arrays["LPEle_absEta"] = np.abs(arrays["LPEle_eta"])
 
         if gen:
             gen_p = arrays["GenEle_p"][arrays[genidx]]
