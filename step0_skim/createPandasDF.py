@@ -1,19 +1,18 @@
-
-
-
-#%%
+# %%
 import sys
+
 sys.path.append("..")
 
 from utils.load_data import load_data, weights_and_merge, convert_to_df
 
 datasets = {
-    "2024" : "../data/dataset2024.root",
-    "2023" : "../data/dataset2023.root",
-    "2022" : "../data/dataset2022.root",
+    "2024": "../data/dataset2024.root",
+    "2023": "../data/dataset2023.root",
+    "2022": "../data/dataset2022.root",
 }
 
 vars = [
+    "LPEle_absEta",
     "LPEle_Tk_validFraction",
     "LPEle_Tk_nValidHits",
     "LPEle_Tk_nLostHits",
@@ -35,7 +34,6 @@ vars = [
     "LPEle_Tk_eSeedClusterOverP",
     "LPEle_Tk_eSeedClusterOverPout",
     "LPEle_Tk_eEleClusterOverPout",
-
     "LPEle_rawEnergy",
     "LPEle_etaWidth",
     "LPEle_phiWidth",
@@ -63,17 +61,17 @@ vars = [
     "LPEle_numberOfClusters",
     "LPEle_iEtaOrX",
     "LPEle_iPhiOrY",
-    "LPEle_iEtaMod5", #(barrel only)
-    "LPEle_iPhiMod2", #(barrel only)
-    "LPEle_iEtaMod20", #(barrel only)
-    "LPEle_iPhiMod20", #(barrel only)
-    "LPEle_rawESEnergy", #(endcap only)
+    "LPEle_iEtaMod5",  # (barrel only)
+    "LPEle_iPhiMod2",  # (barrel only)
+    "LPEle_iEtaMod20",  # (barrel only)
+    "LPEle_iPhiMod20",  # (barrel only)
+    "LPEle_rawESEnergy",  # (endcap only)
     "LPEle_ecalDrivenSeed",
     "LPEle_Tk_p",
     "LPEle_Tk_eta",
     "LPEle_Tk_fbrem",
     "LPEle_Tk_errPRatio",
-    #Aux
+    # Aux
     "LPEle_caloTkRatio",
     "LPEle_energy",
     "LPEle_isAlsoPF",
@@ -100,4 +98,4 @@ df.to_pickle("../data/full_data_splitted_w.pkl")
 
 # %%
 
-#%%
+# %%
