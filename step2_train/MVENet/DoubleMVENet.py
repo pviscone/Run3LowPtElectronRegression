@@ -29,9 +29,11 @@ class DoubleMVENet(nn.Module):
         loss_kwargs={},
         n_epochs=0,
         device=None,
+        features=None,
     ):
         super().__init__()
-
+        if features is not None:
+            assert len(features) == input_shape, "Input shape must match number of features"
         self._normalization = False
         self.model_kwargs = {
             "input_shape": input_shape,
@@ -51,6 +53,7 @@ class DoubleMVENet(nn.Module):
             "loss": loss,
             "loss_kwargs": loss_kwargs,
             "n_epochs": n_epochs,
+            "features": features,
         }
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -147,13 +150,14 @@ class DoubleMVENet(nn.Module):
         mean2_out = self.mean2_branch(inter)
         var2_out = self.var2_branch(inter)
         rho_out = self.rho_branch(inter)
+        mean1_out = torch.exp(mean1_out)
+        mean2_out = torch.exp(mean2_out)
         return torch.cat([mean1_out, var1_out, mean2_out, var2_out, rho_out], dim=-1)
 
-    def normalize(self, X, Y):
+    def normalize(self, X):
         self._normalization = True
         self._X_mean = np.mean(X, axis=0)
         self._X_std = np.std(X, axis=0)
-        self._Y_mean, self._Y_std = self.loss.nomalize_targets(Y)
 
     def mu(self, X_test):
         """Return the mean prediction"""
@@ -166,12 +170,7 @@ class DoubleMVENet(nn.Module):
         self.eval()
         with torch.no_grad():
             out = self(X_test)
-            mu = self.loss.f(out.cpu().numpy())
-            if self._normalization:
-                mu = nn_utils.reverse_normalized(mu, self._Y_mean, self._Y_std)
-                return mu
-            else:
-                return mu
+            return self.loss.f(out.cpu().numpy())
 
     def sigma(self, X_test):
         """Return the standard deviation prediction"""
@@ -184,10 +183,7 @@ class DoubleMVENet(nn.Module):
         self.eval()
         with torch.no_grad():
             out = self(X_test)
-            sigma = self.loss.sigma(out.cpu().numpy())
-            if self._normalization:
-                sigma = sigma * self._Y_std
-            return sigma
+            return self.loss.sigma(out.cpu().numpy())
 
     def rho(self, X_test):
         """Return the correlation prediction"""
@@ -216,6 +212,7 @@ class DoubleMVENet(nn.Module):
             out = self(X_test)
             return self.loss.f(out.cpu().numpy()), self.loss.sigma(out.cpu().numpy()), self.loss.rho(out.cpu().numpy())
 
+    #TODO fix
     def BLUE(self, X_test, x, y):
         if X_test.ndim == 1:
             X_test = X_test[:, None]
@@ -258,8 +255,6 @@ class DoubleMVENet(nn.Module):
                 os.path.join(path, "normalization.npz"),
                 X_mean=self._X_mean,
                 X_std=self._X_std,
-                Y_mean=self._Y_mean,
-                Y_std=self._Y_std,
             )
 
     @classmethod
@@ -273,24 +268,26 @@ class DoubleMVENet(nn.Module):
         with open(os.path.join(path, "fit_kwargs.pkl"), "rb") as f:
             model.fit_kwargs = pickle.load(f)
 
-        if "train_loss" in model.fit_kwargs[0] and n_epochs is None:
-            model.n_epochs = sum([len(fit_kwarg["train_loss"]) for fit_kwarg in model.fit_kwargs])
-        else:
-            model.n_epochs = n_epochs or 0
-
         norm_path = os.path.join(path, "normalization.npz")
         if os.path.exists(norm_path):
             norm = np.load(norm_path)
             model._normalization = True
             model._X_mean = norm["X_mean"]
             model._X_std = norm["X_std"]
-            model._Y_mean = norm["Y_mean"]
-            model._Y_std = norm["Y_std"]
 
         model.load_state_dict(
             torch.load(os.path.join(path, f"model{cls.__name__}.pt"), map_location=device)
         )
         return model
+
+    def init_mu(self):
+        # Set mean branch output bias to target mean
+        with torch.no_grad():
+            self.mean1_branch[-1].bias.data = torch.zeros_like(self.mean1_branch[-1].bias.data)
+            self.mean1_branch[-1].weight.data = torch.zeros_like(self.mean1_branch[-1].weight.data)
+            self.mean2_branch[-1].bias.data = torch.zeros_like(self.mean2_branch[-1].bias.data)
+            self.mean2_branch[-1].weight.data = torch.zeros_like(self.mean2_branch[-1].weight.data)
+
 
     def init_variance(self, X_train, Y_train):
         # Set variance branch output bias to logmse
@@ -313,32 +310,10 @@ class DoubleMVENet(nn.Module):
                 device=self.var2_branch[-1].bias.device,
             )
 
-    def init_mean(self):
+    def init_rho(self):
         with torch.no_grad():
-            self.mean1_branch[-1].bias.data = torch.tensor(
-                [1.0],
-                dtype=torch.float32,
-                device=self.mean1_branch[-1].bias.device,
-            )
-            self.mean2_branch[-1].bias.data = torch.tensor(
-                [1.0],
-                dtype=torch.float32,
-                device=self.mean2_branch[-1].bias.device,
-            )
-
-    def init_rho(self, X_train, Y_train):
-        with torch.no_grad():
-            out = self(X_train).cpu().numpy()
-            mu1 = out[:,0].flatten()
-            mu2 = out[:,2].flatten()
-            y1_true = Y_train[:,0].cpu().numpy().flatten()
-            y2_true = Y_train[:,1].cpu().numpy().flatten()
-            rho_init = np.corrcoef(mu1 - y1_true, mu2 - y2_true)[0,1]
-            self.rho_branch[-2].bias.data = torch.tensor(
-                [rho_init],
-                dtype=torch.float32,
-                device=self.rho_branch[-2].bias.device,
-            )
+            self.rho_branch[-2].bias.data = torch.zeros_like(self.rho_branch[-2].bias.data)
+            self.rho_branch[-2].weight.data = torch.zeros_like(self.rho_branch[-2].weight.data)
 
 
     def freeze(self, patterns):
@@ -360,8 +335,9 @@ class DoubleMVENet(nn.Module):
         for name, param in self.named_parameters():
             if patterns is None:
                 param.requires_grad = True
-                print(f"Unfreezing {name}")
-                self.freezed.remove(name)
+                if name in self.freezed:
+                    print(f"Unfreezing {name}")
+                    self.freezed.remove(name)
             else:
                 for pattern in patterns:
                     if re.match(pattern, name):
@@ -376,16 +352,19 @@ class DoubleMVENet(nn.Module):
         validation = X_val is not None and Y_val is not None
         if X_train.ndim == 1:
             X_train = X_train[:, None]
+        if Y_train.ndim == 1:
+            Y_train = Y_train[:, None]
         if validation:
             if X_val.ndim == 1:
                 X_val = X_val[:, None]
+            if Y_val.ndim == 1:
+                Y_val = Y_val[:, None]
+
 
         if self._normalization:
             X_train = nn_utils.normalize(X_train, self._X_mean, self._X_std)
-            Y_train = nn_utils.normalize(Y_train, self._Y_mean, self._Y_std)
             if validation:
                 X_val = nn_utils.normalize(X_val, self._X_mean, self._X_std)
-                Y_val = nn_utils.normalize(Y_val, self._Y_mean, self._Y_std)
 
         X_train = torch.tensor(X_train, dtype=torch.float32).to(self._device)
         Y_train = torch.tensor(Y_train, dtype=torch.float32).to(self._device)
@@ -432,23 +411,38 @@ class DoubleMVENet(nn.Module):
         savefolder="model_checkpoints",
         diagnostics=False,
     ):
-        fit_kwarg = {
-            "learn_rate": learn_rate,
-            "n_epochs": n_epochs,
-            "batch_size": batch_size,
-            "verbose": verbose,
-            "reg_common": reg_common,
-            "reg_mean1": reg_mean1,
-            "reg_var1": reg_var1,
-            "reg_mean2": reg_mean2,
-            "reg_var2": reg_var2,
-            "reg_rho": reg_rho,
-            "max_norm": max_norm,
-            "train_loss" : [],
-            "val_loss" : [],
-            "freezed": self.freezed.copy(),
-        }
-        self.fit_kwargs.append(fit_kwarg)
+        if (
+            len(self.fit_kwargs) > 0 and
+            learn_rate == self.fit_kwargs[-1]["learn_rate"] and
+            batch_size == self.fit_kwargs[-1]["batch_size"] and
+            reg_common == self.fit_kwargs[-1]["reg_common"] and
+            reg_mean1 == self.fit_kwargs[-1]["reg_mean1"] and
+            reg_var1 == self.fit_kwargs[-1]["reg_var1"] and
+            reg_mean2 == self.fit_kwargs[-1]["reg_mean2"] and
+            reg_var2 == self.fit_kwargs[-1]["reg_var2"] and
+            reg_rho == self.fit_kwargs[-1]["reg_rho"] and
+            max_norm == self.fit_kwargs[-1]["max_norm"] and
+            self.freezed == self.fit_kwargs[-1]["freezed"]
+        ):
+            self.fit_kwargs[-1]["n_epochs"] += n_epochs
+        else:
+            fit_kwarg = {
+                "learn_rate": learn_rate,
+                "n_epochs": n_epochs,
+                "batch_size": batch_size,
+                "reg_common": reg_common,
+                "reg_mean1": reg_mean1,
+                "reg_var1": reg_var1,
+                "reg_mean2": reg_mean2,
+                "reg_var2": reg_var2,
+                "reg_rho": reg_rho,
+                "max_norm": max_norm,
+                "train_loss" : [],
+                "val_loss" : [],
+                "freezed": self.freezed.copy(),
+            }
+            self.fit_kwargs.append(fit_kwarg)
+
         validation = X_val is not None and Y_val is not None
         initial_epoch = self.model_kwargs["n_epochs"]
 
@@ -456,10 +450,10 @@ class DoubleMVENet(nn.Module):
             X_train, Y_train, X_val, Y_val, sample_weight
         )
 
-        if len(self.fit_kwargs) == 1:
+        if self.model_kwargs["n_epochs"] == 0:
             self.init_variance(X_train, Y_train)
-            #self.init_mean()
-            #self.init_rho(X_train, Y_train)
+            #self.init_rho()
+            self.init_mu()
 
         optimizer = torch.optim.Adam(self.parameters(), lr=learn_rate)
 
@@ -516,8 +510,8 @@ class DoubleMVENet(nn.Module):
                     out_val = self(X_val)
                     loss_val = self.loss.loss(Y_val, out_val).mean()
                     self.val_loss.append(loss_val.item())
-                    fit_kwarg["val_loss"].append(self.val_loss[-1])
-            fit_kwarg["train_loss"].append(self.train_loss[-1])
+                    self.fit_kwargs[-1]["val_loss"].append(self.val_loss[-1])
+            self.fit_kwargs[-1]["train_loss"].append(self.train_loss[-1])
 
             if verbose:
                 if validation:

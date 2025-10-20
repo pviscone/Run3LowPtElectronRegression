@@ -13,35 +13,42 @@ class SingleMVENet(nn.Module):
         *,
         input_shape,
         n_hidden_common,
-        n_hidden_mean,
-        n_hidden_var,
+        n_hidden_mean1,
+        n_hidden_var1,
         dropout_input=0.0,
         dropout_common=0.0,
-        dropout_mean=0.0,
-        dropout_var=0.0,
+        dropout_mean1=0.0,
+        dropout_var1=0.0,
         loss,
         loss_kwargs={},
+        n_epochs=0,
         device=None,
+        features=None,
     ):
         super().__init__()
-
+        if features is not None:
+            assert len(features) == input_shape, (
+                "Input shape must match number of features"
+            )
         self._normalization = False
         self.model_kwargs = {
             "input_shape": input_shape,
             "n_hidden_common": n_hidden_common,
-            "n_hidden_mean": n_hidden_mean,
-            "n_hidden_var": n_hidden_var,
+            "n_hidden_mean1": n_hidden_mean1,
+            "n_hidden_var1": n_hidden_var1,
             "dropout_input": dropout_input,
             "dropout_common": dropout_common,
-            "dropout_mean": dropout_mean,
-            "dropout_var": dropout_var,
+            "dropout_mean1": dropout_mean1,
+            "dropout_var1": dropout_var1,
             "loss": loss,
             "loss_kwargs": loss_kwargs,
+            "n_epochs": n_epochs,
+            "features": features,
         }
         self._device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-        self.train_loss = Losses.LossRecord()
-        self.val_loss = Losses.LossRecord()
+        self.train_loss = []
+        self.val_loss = []
         self.fit_kwargs = []
         self._normalization = False
         self.loss = getattr(Losses, loss)(**loss_kwargs)
@@ -64,44 +71,44 @@ class SingleMVENet(nn.Module):
         self.common = nn.Sequential(*layers)
 
         # Mean branch
-        mean_layers = []
-        mean_in = in_features
-        for n in n_hidden_mean:
-            if dropout_mean > 0:
-                mean_layers.append(nn.Dropout(dropout_mean))
-            mean_layers.append(nn.Linear(mean_in, n))
-            mean_layers.append(nn.ELU())
-            mean_in = n
-        mean_layers.append(nn.Linear(mean_in, 1))
-        self.mean_branch = nn.Sequential(*mean_layers)
+        mean1_layers = []
+        mean1_in = in_features
+        for n in n_hidden_mean1:
+            if dropout_mean1 > 0:
+                mean1_layers.append(nn.Dropout(dropout_mean1))
+            mean1_layers.append(nn.Linear(mean1_in, n))
+            mean1_layers.append(nn.ELU())
+            mean1_in = n
+        mean1_layers.append(nn.Linear(mean1_in, 1))
+        self.mean1_branch = nn.Sequential(*mean1_layers)
 
         # Variance branch
-        var_layers = []
-        var_in = in_features
-        for n in n_hidden_var:
-            if dropout_var > 0:
-                var_layers.append(nn.Dropout(dropout_var))
-            var_layers.append(nn.Linear(var_in, n))
-            var_layers.append(nn.ELU())
-            var_in = n
-        var_layers.append(nn.Linear(var_in, 1))
-        self.var_branch = nn.Sequential(*var_layers)
+        var1_layers = []
+        var1_in = in_features
+        for n in n_hidden_var1:
+            if dropout_var1 > 0:
+                var1_layers.append(nn.Dropout(dropout_var1))
+            var1_layers.append(nn.Linear(var1_in, n))
+            var1_layers.append(nn.ELU())
+            var1_in = n
+        var1_layers.append(nn.Linear(var1_in, 1))
+        self.var1_branch = nn.Sequential(*var1_layers)
 
         self.to(self._device)
 
     def forward(self, x):
         inter = self.common(x)
-        mean_out = self.mean_branch(inter)
-        var_out = self.var_branch(inter)
-        return torch.cat([mean_out, var_out], dim=-1)
+        mean1_out = self.mean1_branch(inter)
+        var1_out = self.var1_branch(inter)
+        mean1_out = torch.exp(mean1_out)
+        return torch.cat([mean1_out, var1_out], dim=-1)
 
-    def normalize(self, X, Y):
+    def normalize(self, X):
         self._normalization = True
         self._X_mean = np.mean(X, axis=0)
         self._X_std = np.std(X, axis=0)
-        self._Y_mean, self._Y_std = self.loss.nomalize_targets(Y)
 
-    def f(self, X_test):
+    def mu(self, X_test):
         """Return the mean prediction"""
         if X_test.ndim == 1:
             X_test = X_test[:, None]
@@ -111,12 +118,8 @@ class SingleMVENet(nn.Module):
 
         self.eval()
         with torch.no_grad():
-            out = self(X_test).cpu().numpy()
-            mu = self.loss.f(out)
-            if self._normalization:
-                return nn_utils.reverse_normalized(mu, self._Y_mean, self._Y_std)
-            else:
-                return mu
+            out = self(X_test)
+            return self.loss.f(out.cpu().numpy())
 
     def sigma(self, X_test):
         """Return the standard deviation prediction"""
@@ -128,12 +131,24 @@ class SingleMVENet(nn.Module):
 
         self.eval()
         with torch.no_grad():
-            out = self(X_test).cpu().numpy()
-            sigma = self.loss.sigma(out)
+            out = self(X_test)
+            return self.loss.sigma(out.cpu().numpy())
 
-            if self._normalization:
-                sigma = sigma * self._Y_std
-            return sigma
+    def f(self, X_test):
+        """Return the correlation prediction"""
+        if X_test.ndim == 1:
+            X_test = X_test[:, None]
+        if self._normalization:
+            X_test = nn_utils.normalize(X_test, self._X_mean, self._X_std)
+        X_test = torch.tensor(X_test, dtype=torch.float32).to(self._device)
+
+        self.eval()
+        with torch.no_grad():
+            out = self(X_test)
+            return (
+                self.loss.f(out.cpu().numpy()),
+                self.loss.sigma(out.cpu().numpy()),
+            )
 
     def show(self):
         print(self)
@@ -143,7 +158,10 @@ class SingleMVENet(nn.Module):
 
     def save(self, path):
         os.makedirs(path, exist_ok=True)
-        torch.save(self.state_dict(), os.path.join(path, f"model{self.__class__.__name__}.pt"))
+        torch.save(
+            self.state_dict(), os.path.join(path, f"model{self.__class__.__name__}.pt")
+        )
+
         with open(os.path.join(path, "model_kwargs.pkl"), "wb") as f:
             pickle.dump(self.model_kwargs, f)
         with open(os.path.join(path, "fit_kwargs.pkl"), "wb") as f:
@@ -153,12 +171,10 @@ class SingleMVENet(nn.Module):
                 os.path.join(path, "normalization.npz"),
                 X_mean=self._X_mean,
                 X_std=self._X_std,
-                Y_mean=self._Y_mean,
-                Y_std=self._Y_std,
             )
 
     @classmethod
-    def load(cls, path, device=None):
+    def load(cls, path, device=None, n_epochs=None):
         with open(os.path.join(path, "model_kwargs.pkl"), "rb") as f:
             model_kwargs = pickle.load(f)
         model = cls(**model_kwargs, device=device)
@@ -174,24 +190,43 @@ class SingleMVENet(nn.Module):
             model._normalization = True
             model._X_mean = norm["X_mean"]
             model._X_std = norm["X_std"]
-            model._Y_mean = norm["Y_mean"]
-            model._Y_std = norm["Y_std"]
 
         model.load_state_dict(
-            torch.load(os.path.join(path, f"model{cls.__name__}.pt"), map_location=device)
+            torch.load(
+                os.path.join(path, f"model{cls.__name__}.pt"), map_location=device
+            )
         )
         return model
 
     def init_variance(self, X_train, Y_train):
         # Set variance branch output bias to logmse
         with torch.no_grad():
-            mean_preds = self(X_train).cpu().numpy()[:, 0].flatten()
-            y_true = Y_train.cpu().numpy().flatten()
-            logmse = np.log(np.mean(np.square(mean_preds - y_true)))
-            self.var_branch[-1].bias.data = torch.tensor(
-                [logmse],
-                dtype=torch.float32,
-                device=self.var_branch[-1].bias.device,
+            out = self(X_train).cpu().numpy()
+            mu1 = out[:, 0].flatten()
+            y1_true = Y_train.cpu().numpy().flatten()
+            if "L2" in self.model_kwargs["loss"]:
+                logmse1 = 0.5 * np.log(np.mean(np.square(mu1 - y1_true)))
+                self.var1_branch[-1].bias.data = torch.tensor(
+                    [logmse1],
+                    dtype=torch.float32,
+                    device=self.var1_branch[-1].bias.device,
+                )
+            elif "L1" in self.model_kwargs["loss"]:
+                logmae1 = np.log(np.mean(np.abs(mu1 - y1_true)))
+                self.var1_branch[-1].bias.data = torch.tensor(
+                    [logmae1],
+                    dtype=torch.float32,
+                    device=self.var1_branch[-1].bias.device,
+                )
+
+    def init_mu(self):
+        # Set mean branch output bias to target mean
+        with torch.no_grad():
+            self.mean1_branch[-1].bias.data = torch.zeros_like(
+                self.mean1_branch[-1].bias.data
+            )
+            self.mean1_branch[-1].weight.data = torch.zeros_like(
+                self.mean1_branch[-1].weight.data
             )
 
     def freeze(self, patterns):
@@ -213,8 +248,9 @@ class SingleMVENet(nn.Module):
         for name, param in self.named_parameters():
             if patterns is None:
                 param.requires_grad = True
-                print(f"Unfreezing {name}")
-                self.freezed.remove(name)
+                if name in self.freezed:
+                    print(f"Unfreezing {name}")
+                    self.freezed.remove(name)
             else:
                 for pattern in patterns:
                     if re.match(pattern, name):
@@ -239,10 +275,8 @@ class SingleMVENet(nn.Module):
 
         if self._normalization:
             X_train = nn_utils.normalize(X_train, self._X_mean, self._X_std)
-            Y_train = nn_utils.normalize(Y_train, self._Y_mean, self._Y_std)
             if validation:
                 X_val = nn_utils.normalize(X_val, self._X_mean, self._X_std)
-                Y_val = nn_utils.normalize(Y_val, self._Y_mean, self._Y_std)
 
         X_train = torch.tensor(X_train, dtype=torch.float32).to(self._device)
         Y_train = torch.tensor(Y_train, dtype=torch.float32).to(self._device)
@@ -260,6 +294,17 @@ class SingleMVENet(nn.Module):
             )
         return X_train, Y_train, X_val, Y_val, sample_weight
 
+    def get_loss(self):
+        train_loss = [
+            item for fit_kwarg in self.fit_kwargs for item in fit_kwarg["train_loss"]
+        ]
+        val_loss = [
+            item
+            for fit_kwarg in self.fit_kwargs
+            for item in fit_kwarg.get("val_loss", [])
+        ]
+        return train_loss, val_loss
+
     def train_model(
         self,
         X_train,
@@ -270,30 +315,53 @@ class SingleMVENet(nn.Module):
         learn_rate=0.001,
         n_epochs=100,
         batch_size=32,
-        verbose=False,
+        verbose=True,
         reg_common=0,
-        reg_mean=0,
-        reg_var=0,
+        reg_mean1=0,
+        reg_var1=0,
+        max_norm=1.0,
+        checkpoint=None,
+        callback_every=None,
+        callback=None,
+        savefolder="model_checkpoints",
+        diagnostics=False,
     ):
-        fit_kwarg = {
-            "learn_rate": learn_rate,
-            "n_epochs": n_epochs,
-            "batch_size": batch_size,
-            "verbose": verbose,
-            "reg_common": reg_common,
-            "reg_mean": reg_mean,
-            "reg_var": reg_var,
-            "freezed": self.freezed.copy(),
-        }
-        self.fit_kwargs.append(fit_kwarg)
+        if (
+            len(self.fit_kwargs) > 0
+            and learn_rate == self.fit_kwargs[-1]["learn_rate"]
+            and batch_size == self.fit_kwargs[-1]["batch_size"]
+            and reg_common == self.fit_kwargs[-1]["reg_common"]
+            and reg_mean1 == self.fit_kwargs[-1]["reg_mean1"]
+            and reg_var1 == self.fit_kwargs[-1]["reg_var1"]
+            and max_norm == self.fit_kwargs[-1]["max_norm"]
+            and self.freezed == self.fit_kwargs[-1]["freezed"]
+        ):
+            self.fit_kwargs[-1]["n_epochs"] += n_epochs
+        else:
+            fit_kwarg = {
+                "learn_rate": learn_rate,
+                "n_epochs": n_epochs,
+                "batch_size": batch_size,
+                "reg_common": reg_common,
+                "reg_mean1": reg_mean1,
+                "reg_var1": reg_var1,
+                "max_norm": max_norm,
+                "train_loss": [],
+                "val_loss": [],
+                "freezed": self.freezed.copy(),
+            }
+            self.fit_kwargs.append(fit_kwarg)
+
         validation = X_val is not None and Y_val is not None
+        initial_epoch = self.model_kwargs["n_epochs"]
 
         X_train, Y_train, X_val, Y_val, sample_weight = self.prepare_tensors(
             X_train, Y_train, X_val, Y_val, sample_weight
         )
 
-        if len(self.fit_kwargs) == 1:
+        if self.model_kwargs["n_epochs"] == 0:
             self.init_variance(X_train, Y_train)
+            self.init_mu()
 
         optimizer = torch.optim.Adam(self.parameters(), lr=learn_rate)
 
@@ -318,12 +386,27 @@ class SingleMVENet(nn.Module):
                 epoch_loss += loss.item() * xb.shape[0]
 
                 l2_common = reg_common * nn_utils.get_l2_reg(self.common)
-                l2_mean = reg_mean * nn_utils.get_l2_reg(self.mean_branch)
-                l2_var = reg_var * nn_utils.get_l2_reg(self.var_branch)
-                full_loss = loss + l2_common + l2_mean + l2_var
+                l2_mean1 = reg_mean1 * nn_utils.get_l2_reg(self.mean1_branch)
+                l2_var1 = reg_var1 * nn_utils.get_l2_reg(self.var1_branch)
+                full_loss = loss + l2_common + l2_mean1 + l2_var1
                 full_loss.backward()
+                if max_norm is not None:
+                    torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=max_norm)
                 optimizer.step()
             self.train_loss.append(epoch_loss / X_train.shape[0])
+
+            if diagnostics:
+                if np.isnan(epoch_loss) or np.isinf(epoch_loss):
+                    if np.isnan(epoch_loss):
+                        print(f"NaN detected in loss at epoch {epoch}")
+                    if np.isinf(epoch_loss):
+                        print(f"Inf detected in loss at epoch {epoch}")
+                    for name, param in self.named_parameters():
+                        if torch.isnan(param).any():
+                            print(f"NaN detected in parameter: {name} at epoch {epoch}")
+                        if torch.isinf(param).any():
+                            print(f"Inf detected in parameter: {name} at epoch {epoch}")
+                    break
 
             if validation:
                 self.eval()
@@ -331,10 +414,36 @@ class SingleMVENet(nn.Module):
                     out_val = self(X_val)
                     loss_val = self.loss.loss(Y_val, out_val).mean()
                     self.val_loss.append(loss_val.item())
+                    self.fit_kwargs[-1]["val_loss"].append(self.val_loss[-1])
+            self.fit_kwargs[-1]["train_loss"].append(self.train_loss[-1])
+
             if verbose:
                 if validation:
                     print(
-                        f"Epoch {epoch}; Train Loss: {self.train_loss[-1]:.4f}, Val Loss: {self.val_loss[-1]:.4f}"
+                        f"Epoch {self.model_kwargs['n_epochs']}/{initial_epoch + n_epochs}; Train Loss: {self.train_loss[-1]:.4f}, Val Loss: {self.val_loss[-1]:.4f}"
                     )
                 else:
-                    print(f"Epoch {epoch}; Train Loss: {self.train_loss[-1]:.4f}")
+                    print(
+                        f"Epoch {self.model_kwargs['n_epochs']}/{initial_epoch + n_epochs}; Train Loss: {self.train_loss[-1]:.4f}"
+                    )
+
+            if checkpoint is not None and (epoch + 1) % checkpoint == 0:
+                os.makedirs(savefolder, exist_ok=True)
+                self.save(
+                    os.path.join(savefolder, f"epoch_{self.model_kwargs['n_epochs']}")
+                )
+                print(
+                    f"Model checkpoint saved at epoch {self.model_kwargs['n_epochs']} to {savefolder}"
+                )
+            if (
+                callback_every is not None
+                and (epoch + 1) % callback_every == 0
+                and callback is not None
+            ):
+                callback(
+                    self,
+                    os.path.join(savefolder, f"epoch_{self.model_kwargs['n_epochs']}"),
+                    self.model_kwargs["n_epochs"],
+                )
+
+            self.model_kwargs["n_epochs"] += 1
