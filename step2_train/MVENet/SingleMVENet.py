@@ -319,7 +319,7 @@ class SingleMVENet(nn.Module):
         reg_common=0,
         reg_mean1=0,
         reg_var1=0,
-        max_norm=1.0,
+        max_norm=None,
         checkpoint=None,
         callback_every=None,
         callback=None,
