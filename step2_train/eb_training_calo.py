@@ -17,7 +17,7 @@ hep.style.use("CMS")
 
 df = pd.read_pickle("../data/full_data_splitted_w.pkl")
 df = df[df["LPEle_isEB"] == 1]
-df = df[df["LPEle_caloTarget"] < 10]
+#df = df[df["LPEle_caloTarget"] < 10]
 # df = df[df["LPEle_tkTarget"] < 5]
 
 
@@ -86,10 +86,25 @@ def callback(model, savefolder, nepochs):
         "LPEle_corrFact",
         "LPEle_sigma",
         sigma_bins=np.arange(0, 2, 0.05),
-        genp_bins=[0, 40, 80, 100, 200, 400, 600],
-        eta_bins=[0, 0.8, 1.44],
+        #genp_bins=[0, 100, 350, 600],
+        #eta_bins=[0, 0.8, 1.44],
         savefolder=f"{savefolder}/plots/calo",
         metric="L1",
+        plot_distributions=True
+    )
+
+
+    plot_calibration_curve(
+        df_test,
+        "LPEle_caloTarget",
+        "LPEle_corrFact",
+        "LPEle_sigma",
+        sigma_bins=np.arange(0, 0.1, 0.005),
+        genp_bins=[0, 100, 350, 600],
+        eta_bins=[0, 0.8, 1.2],
+        savefolder=f"{savefolder}/plots/calo",
+        metric="L1",
+        plot_distributions=True
     )
 
 
@@ -97,8 +112,8 @@ def callback(model, savefolder, nepochs):
 model = SingleMVENet(
     input_shape=len(features_eb),
     n_hidden_common=[],
-    n_hidden_mean1=[512, 256, 128, 64, 32],
-    n_hidden_var1=[512, 256, 128, 64, 32],
+    n_hidden_mean1=[256, 256, 256, 128, 64, 32, 16],
+    n_hidden_var1=[256, 256, 256, 128, 64, 32, 16],
     dropout_input=0.,
     dropout_mean1=0.,
     dropout_var1=0.,
@@ -106,40 +121,21 @@ model = SingleMVENet(
 )
 
 model.normalize(X_train)
-model.freeze([".*var.*"])
 model.train_model(
     X_train,
     Y_train,
-    sample_weight=w,
+    #sample_weight=w,
     X_val=X_val,
     Y_val=Y_val,
     batch_size=10280,
-    learn_rate=1e-3,
-    n_epochs=60,
-    reg_var1=0.1,
-    reg_mean1=0.  ,
-    max_norm=None,
-    checkpoint=30,
-    callback=callback,
-    callback_every=30,
-    savefolder="model_caloEBL1",
-)
-model.unfreeze()
-model.train_model(
-    X_train,
-    Y_train,
-    sample_weight=w,
-    X_val=X_val,
-    Y_val=Y_val,
-    batch_size=10280,
-    learn_rate=8e-4,
+    learn_rate=5e-4,
     n_epochs=1000,
-    reg_var1=0.05,
-    reg_mean1=0.  ,
+    reg_var1=1e-2,
+    reg_mean1=1e-4,
     max_norm=None,
-    checkpoint=50,
+    checkpoint=100,
     callback=callback,
-    callback_every=50,
+    callback_every=100,
     savefolder="model_caloEBL1",
 )
 # %%
