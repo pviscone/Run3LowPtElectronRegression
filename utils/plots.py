@@ -296,6 +296,7 @@ def plot_calibration_curve(
     eta_bins=None,
     savefolder="plots/calibration",
     metric="L2",
+    plot_distributions=False,
 ):
     genp_col = "LPEle_Gen_p"
     eta_col = "LPEle_eta"
@@ -322,6 +323,22 @@ def plot_calibration_curve(
             mu_masked = mu[bin_mask]
             sigma_masked = sigma[bin_mask]
             center = (sigma_low + sigma_high) / 2.0
+            if plot_distributions:
+                fig, ax = plt.subplots()
+                ax.axvline(0, color="black", linestyle="--", alpha=0.5)
+                ax.hist(
+                    (y_masked - mu_masked),
+                    bins=50,
+                    density=True,
+                    alpha=0.7,
+                    label=f"Entries: {len(y_masked)}",
+                )
+                ax.set_xlabel("Residuals (Target - Predicted)")
+                ax.set_title(f"$\\sigma$ [{sigma_low:.2f}, {sigma_high:.2f}]")
+                fig.savefig(
+                    f"{savefolder}/residuals_distribution_sigmaBin_[{sigma_low:.2f},{sigma_high:.2f}]_{suffix}.pdf"
+                )
+                plt.close(fig)
 
             if metric == "L2":
                 emp_sigma = np.std(y_masked - mu_masked)
