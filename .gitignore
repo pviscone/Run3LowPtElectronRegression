@@ -17,3 +17,4 @@ temp*
 *.pdf
 *.png
 OLD
+*.json
