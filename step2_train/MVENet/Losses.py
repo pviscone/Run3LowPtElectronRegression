@@ -89,7 +89,7 @@ class L2Loss(Loss):
 
 
 class L1Loss(Loss):
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
         self.n_out = 2
         self.n_targets = 1
         self.activations = ["Linear", "Linear"]
@@ -115,6 +115,34 @@ class L1Loss(Loss):
         Y_mean = np.median(Y, axis=0)
         Y_std = np.mean(np.abs(Y - Y_mean))
         return Y_mean, Y_std
+
+
+class QuantileLoss(Loss):
+    def __init__(self, quantiles, **kwargs):
+        self.n_out = len(quantiles)
+        self.n_targets = 1
+        self.activations = ["Linear"] + ["Softplus"] * (self.n_out-1) #lean log quantiles
+        self.quantiles = quantiles
+        self.qs = torch.tensor(quantiles, device='cuda' if torch.cuda.is_available() else 'cpu').view(1, -1)
+
+    def loss(self, targets, outputs):
+        y = targets[..., 0:1]                                    # [B,1]
+        qs = outputs.new_tensor(self.quantiles).view(1, -1)      # [1,Q]
+        errors = y - outputs                                     # [B,Q]
+        per_q = torch.maximum(qs * errors, (qs - 1.0) * errors)  # [B,Q]
+        return per_q.mean(dim=-1)                                # [B]
+
+    def nomalize_targets(self, Y):
+        Y_mean = np.median(Y, axis=0)
+        Y_std = np.mean(np.abs(Y - Y_mean))
+        return Y_mean, Y_std
+
+    def f(self, outputs, numpy=True):
+        pass
+
+    def sigma(self, outputs, numpy=True):
+        pass
+
 
 
 class BivariateL2(Loss):
@@ -315,7 +343,6 @@ class Rotated2DL1(Loss):
         return Y_mean, Y_std
 
 
-
 loss_dictionary = {
     "BetaLoss": BetaLoss,
     "L2Loss": L2Loss,
@@ -324,4 +351,5 @@ loss_dictionary = {
     "BivariateL1": BivariateL1,
     "MahalanobisL1": MahalanobisL1,
     "Rotated2DL1": Rotated2DL1,
+    "QuantileLoss": QuantileLoss,
 }
