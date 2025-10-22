@@ -5,6 +5,7 @@ import numpy as np
 import hist
 import os
 from scipy.special import erf
+from scipy.stats import bootstrap
 
 hep.style.use("CMS")
 
@@ -395,6 +396,185 @@ def plot_calibration_curve(
             mask = eta_mask & (genp >= genp_lo) & (genp < genp_hi)
             _plot_for_mask(
                 y[mask], mu[mask], sigma[mask],
+                f"eta_[{eta_lo:.2f},{eta_hi:.2f}]_genp_[{genp_lo:.2f},{genp_hi:.2f}]",
+            )
+    return
+
+
+
+def plot_quantile_curve(
+    df,
+    target,
+    outputs,
+    quantiles,
+    genp_bins=None,
+    eta_bins=None,
+    savefolder="plots/quantile",
+    plot_distributions=False,
+    plot_true_distributions=False,
+):
+    genp_col = "LPEle_Gen_p"
+    eta_col = "LPEle_eta"
+    savefolder = f"{savefolder}/quantile"
+
+    assert outputs.shape[1] == len(quantiles)
+    assert outputs.shape[0] == df.shape[0]
+    quantiles = np.array(quantiles)
+
+    os.makedirs(savefolder, exist_ok=True)
+    y = df[target].values
+
+    def _plot_for_mask(y_pred, y_true, suffix):
+        #y_pred = N x Q
+        #y_true = N X 1??
+        if len(y_true)==0:
+            return
+        mask_ = ~(np.isnan(y_pred).any(axis=1))
+        y_true = y_true[mask_]
+        y_pred = y_pred[mask_]
+        true_quantiles = np.array([])
+        for q in quantiles:
+            true_q = np.quantile(y_true, q)
+            true_quantiles = np.append(true_quantiles, true_q)
+        if plot_true_distributions:
+            os.makedirs(f"{savefolder}/true_distributions", exist_ok=True)
+            fig, ax = plt.subplots()
+            q1 = np.quantile(y_true, 0.01)
+            q99 = np.quantile(y_true, 0.99)
+            plt.hist(
+                y_true,
+                bins=np.linspace(q1,q99,60),
+                density=True,
+                alpha=0.7,
+                label=f"Entries: {len(y_true)}",
+            )
+            for i, q in enumerate(quantiles):
+                ax.axvline(true_quantiles[i], color="black", linestyle="--", alpha=0.5,
+                           label=f"True quantile {q}: {true_quantiles[i]:.2f}" if i==0 else None)
+            ax.set_xlabel(f"True Target: {target}")
+            ax.set_title(f"True Target Distribution")
+            ax.legend()
+            fig.savefig(
+                f"{savefolder}/true_distributions/true_target_distribution_{suffix}.pdf"
+            )
+            plt.close(fig)
+
+        if plot_distributions:
+            for i, q in enumerate(quantiles):
+                y_pred_i_mask = np.isfinite(y_pred[:, i])
+                y_pred_i = y_pred[y_pred_i_mask][:, i]
+                if len(y_pred_i)==0:
+                    continue
+                fig, ax = plt.subplots()
+                ax.axvline(true_quantiles[i], color="black", linestyle="--", alpha=0.5)
+                q1 = np.quantile(y_pred_i, 0.01)
+                q99 = np.quantile(y_pred_i, 0.99)
+                ax.text(0.7, 0.8, f"Entries: {len(y_pred_i)}", transform=ax.transAxes)
+                ax.hist(
+                    y_pred_i,
+                    bins=np.linspace(q1,q99,60),
+                    density=True,
+                    alpha=0.7,
+                    label=f"Entries: {y_pred.shape[0]}",
+                )
+                ax.set_xlabel(f"Predicted quantile {q}")
+                ax.set_title(f"Quantile {q} Distribution")
+                fig.savefig(
+                    f"{savefolder}/quantile_{q}_distribution_{suffix}.pdf"
+                )
+                plt.close(fig)
+
+        med_q = np.median(y_pred, axis=0)
+        q64_q = np.percentile(y_pred, 64, axis=0)
+        q16_q = np.percentile(y_pred, 16, axis=0)
+        sigma_q = (q64_q - q16_q) / 2.0
+
+        fig, ax = plt.subplots()
+
+        kwargs = {}
+        """
+        def quantile_statistic(q):
+            def f(data):
+                return np.quantile(data, q)
+            return f
+
+        xerr = []
+        for q in quantiles:
+            res = bootstrap(
+                (y_true,),
+                statistic=quantile_statistic(q),
+                n_resamples=10000,
+                method='BCa', # Bias-Corrected and Accelerated method
+                confidence_level=0.68,
+                axis=0,
+                vectorized=False,
+            )
+
+            # --- 4. Extract Results ---
+            original_quantile = quantile_statistic(y_true, q)
+            ci = res.confidence_interval
+            xerr.append((original_quantile - ci.low, ci.high - original_quantile))
+
+        Nboot = 1000
+        xerr=[]
+        for q in quantiles:
+            boots = [np.quantile(np.random.choice(y_true, len(y_true), replace=True), q) for _ in range(Nboot)]
+            ci = np.percentile(boots, [16, 84])  # 68% CI
+            xerr.append(ci)
+
+        xerr = np.abs(np.array(xerr).T-true_quantiles)
+
+        kwargs["xerr"] = xerr
+        """
+
+        ax.errorbar(true_quantiles, med_q, yerr=sigma_q,
+                    fmt="o", label=f"quantiles = {quantiles}", color="blue", **kwargs)
+        ax.set_xlabel("True quantiles")
+        ax.set_ylabel("Predicted quantiles")
+        #diagonal
+        ax.text(0.3, 0.8, f"Entries: {y_true.shape[0]}", transform=ax.transAxes)
+        ax.plot([min(true_quantiles), max(true_quantiles)], [min(true_quantiles), max(true_quantiles)], "--", color="gray", label="Ideal", alpha=0.5)
+        ax.set_xlim(min(true_quantiles)*0.95, 1.05*max(true_quantiles))
+        ax.set_ylim(min(true_quantiles)*0.85, 1.15*max(true_quantiles))
+        ax.legend()
+        fig.savefig(
+            f"{savefolder}/quantile_curve_{suffix.replace(' ', '_').replace('[', '').replace(']', '').replace(',', '_')}.pdf"
+        )
+        fig.savefig(
+            f"{savefolder}/quantile_curve_{suffix.replace(' ', '_').replace('[', '').replace(']', '').replace(',', '_')}.png"
+        )
+        plt.close(fig)
+
+    genp_provided = genp_bins is not None
+    eta_provided = eta_bins is not None
+
+    if not genp_provided and not eta_provided:
+        _plot_for_mask(outputs, y, "global")
+        return
+
+    if genp_provided and not eta_provided:
+        genp = df[genp_col].values
+        for lo, hi in zip(genp_bins[:-1], genp_bins[1:]):
+            mask = (genp >= lo) & (genp < hi)
+            _plot_for_mask(outputs[mask], y[mask], f"genp_{lo:.2f}_{hi:.2f}")
+        return
+
+    if eta_provided and not genp_provided:
+        eta = np.abs(df[eta_col].values)
+        for lo, hi in zip(eta_bins[:-1], eta_bins[1:]):
+            mask = (eta >= lo) & (eta < hi)
+            _plot_for_mask(outputs[mask], y[mask], f"eta_{lo:.2f}_{hi:.2f}")
+        return
+
+    genp = df[genp_col].values
+    eta = np.abs(df[eta_col].values)
+
+    for eta_lo, eta_hi in zip(eta_bins[:-1], eta_bins[1:]):
+        eta_mask = (eta >= eta_lo) & (eta < eta_hi)
+        for genp_lo, genp_hi in zip(genp_bins[:-1], genp_bins[1:]):
+            mask = eta_mask & (genp >= genp_lo) & (genp < genp_hi)
+            _plot_for_mask(
+                outputs[mask], y[mask],
                 f"eta_[{eta_lo:.2f},{eta_hi:.2f}]_genp_[{genp_lo:.2f},{genp_hi:.2f}]",
             )
     return
