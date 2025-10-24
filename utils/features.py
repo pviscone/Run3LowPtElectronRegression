@@ -17,6 +17,9 @@ combined_features = [
     "LPEle_Tk_eSuperClusterOverP",
     "LPEle_Tk_eEleClusterOverPout",
     "LPEle_isAlsoPF",
+    "LPEle_Tk_p",
+    "LPEle_rawEnergy",
+    "LPEle_Tk_eta"
 ]
 
 tk_features = [

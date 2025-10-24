@@ -143,6 +143,53 @@ class QuantileLoss(Loss):
     def sigma(self, outputs, numpy=True):
         pass
 
+class CombineLossL2(Loss):
+    def __init__(self, **kwargs):
+        self.n_out = 2
+        self.activations = ["Linear", "Linear"]
+
+    def loss(self, targets, outputs):
+        #targets: [B, 2] (E/gen ratio, p/gen ratio)
+        #outputs: [B, 2]
+        #elementwise product
+        out = torch.sum(targets * outputs, axis=1)
+        return (out-1)**2
+
+    def nomalize_targets(self, Y):
+        Y_mean = np.median(Y, axis=0)
+        Y_std = np.mean(np.abs(Y - Y_mean))
+        return Y_mean, Y_std
+
+    def f(self, outputs, numpy=True):
+        pass
+
+    def sigma(self, outputs, numpy=True):
+        pass
+
+class CombineLossL1(Loss):
+    def __init__(self, **kwargs):
+        self.n_out = 2
+        self.activations = ["Linear", "Linear"]
+
+    def loss(self, targets, outputs):
+        #targets: [B, 2] (E/gen ratio, p/gen ratio)
+        #outputs: [B, 2]
+        #elementwise product
+        out = torch.sum(targets * outputs, axis=1)
+        return torch.abs(out-1)
+
+    def nomalize_targets(self, Y):
+        Y_mean = np.median(Y, axis=0)
+        Y_std = np.mean(np.abs(Y - Y_mean))
+        return Y_mean, Y_std
+
+    def f(self, outputs, numpy=True):
+        pass
+
+    def sigma(self, outputs, numpy=True):
+        pass
+
+
 
 
 class BivariateL2(Loss):
@@ -352,4 +399,6 @@ loss_dictionary = {
     "MahalanobisL1": MahalanobisL1,
     "Rotated2DL1": Rotated2DL1,
     "QuantileLoss": QuantileLoss,
+    "CombineLossL2": CombineLossL2,
+    "CombineLossL1": CombineLossL1,
 }
