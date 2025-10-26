@@ -324,6 +324,16 @@ def plot_calibration_curve(
             mu_masked = mu[bin_mask]
             sigma_masked = sigma[bin_mask]
             center = (sigma_low + sigma_high) / 2.0
+
+            if metric == "L2":
+                emp_sigma = np.std(y_masked - mu_masked)
+            elif metric == "L1":
+                emp_sigma = np.sqrt(2) * np.mean(np.abs(y_masked - mu_masked))
+
+            median_emp_sigma = np.median(emp_sigma)
+            centers = np.append(centers, [center])
+            meds = np.append(meds, [median_emp_sigma])
+
             if plot_distributions:
                 fig, ax = plt.subplots()
                 ax.axvline(0, color="black", linestyle="--", alpha=0.5)
@@ -334,21 +344,23 @@ def plot_calibration_curve(
                     alpha=0.7,
                     label=f"Entries: {len(y_masked)}",
                 )
+                #fill between -sigma and +sigma
+                ax.fill_betweenx(
+                    y=[0, ax.get_ylim()[1]],
+                    x1=-median_emp_sigma,
+                    x2=median_emp_sigma,
+                    color="gray",
+                    alpha=0.3,
+                    label=f"Empirical $\sigma$: {median_emp_sigma:.3f}",
+                )
                 ax.set_xlabel("Residuals (Target - Predicted)")
                 ax.set_title(f"$\\sigma$ [{sigma_low:.2f}, {sigma_high:.2f}]")
+                ax.legend()
                 fig.savefig(
                     f"{savefolder}/residuals_distribution_sigmaBin_[{sigma_low:.2f},{sigma_high:.2f}]_{suffix}.pdf"
                 )
                 plt.close(fig)
 
-            if metric == "L2":
-                emp_sigma = np.std(y_masked - mu_masked)
-            elif metric == "L1":
-                emp_sigma = np.sqrt(2) * np.mean(np.abs(y_masked - mu_masked))
-
-            median_emp_sigma = np.median(emp_sigma)
-            centers = np.append(centers, [center])
-            meds = np.append(meds, [median_emp_sigma])
 
         fig, ax = plt.subplots()
         ax.plot(centers, centers, "--", color="gray", label="Ideal", alpha=0.5)
