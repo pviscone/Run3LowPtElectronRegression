@@ -10,14 +10,14 @@ import mplhep as hep
 import numpy as np
 import os
 
-from utils.features import caloEB_features, common_features, to_log
+from utils.features import tk_features, common_features, to_log
 from utils.plots import response_resolution, plot_calibration_curve
 
 hep.style.use("CMS")
 
 df = pd.read_pickle("../../../data/full_data_splitted_w.pkl")
 df = df[df["LPEle_isEB"] == 1]
-#df = df[df["LPEle_caloTarget"] < 10]
+#df = df[df["LPEle_tkTarget"] < 10]
 # df = df[df["LPEle_tkTarget"] < 5]
 
 
@@ -28,9 +28,9 @@ for feature in to_log:
         df[feature] = np.log(1e-8 + df[feature].values)
 
 
-features_eb = common_features + caloEB_features
+features_eb = common_features + tk_features
 train_data = df[features_eb].to_numpy()
-targets = df["LPEle_caloTarget"].to_numpy()
+targets = df["LPEle_tkTarget"].to_numpy()
 w = df["LPEle_w"].to_numpy()
 
 df_train, df_test, X_train, X_val, Y_train, Y_val, w, _ = train_test_split(
@@ -48,32 +48,32 @@ def callback(model, savefolder, nepochs):
     ax.legend()
     fig.savefig(f"{savefolder}/loss_eb.pdf")
 
-    df_test["LPEle_ERatio"] = df_test["LPEle_energy"] / df_test["LPEle_Gen_p"]
+    df_test["LPEle_ERatio"] = df_test["LPEle_Tk_p"] / df_test["LPEle_Gen_p"]
     mu, sigma = model.f(df_test[features_eb].to_numpy())
     df_test["LPEle_corrFact"] = mu
     df_test["LPEle_sigma"] = sigma
 
     df_test["LPEle_ECorrRatio"] = df_test["LPEle_corrFact"] * df_test["LPEle_ERatio"]
 
-    pratio_dict_calo = {
+    pratio_dict_tk = {
         "No Regression": "LPEle_ERatio",
         "Regressed": "LPEle_ECorrRatio",
     }
 
     response_resolution(
         df_test,
-        pratio_dict_calo,
+        pratio_dict_tk,
         "LPEle_Gen_p",
         "LPEle_Gen_eta",
         plot_distributions=False,
         eta_bins=[0, 0.25, 0.5, 0.75, 1, 1.25, 1.47],
-        lab="E_{\\text{calo}}",
+        lab="E_{\\text{tk}}",
         savefolder=f"{savefolder}",
     )
 
     plot_calibration_curve(
         df_test,
-        "LPEle_caloTarget",
+        "LPEle_tkTarget",
         "LPEle_corrFact",
         "LPEle_sigma",
         sigma_bins=np.arange(0, 2, 0.05),
@@ -87,7 +87,7 @@ def callback(model, savefolder, nepochs):
 
     plot_calibration_curve(
         df_test,
-        "LPEle_caloTarget",
+        "LPEle_tkTarget",
         "LPEle_corrFact",
         "LPEle_sigma",
         sigma_bins=np.arange(0, 0.1, 0.005),
@@ -127,7 +127,7 @@ model.train_model(
     checkpoint=100,
     callback=callback,
     callback_every=100,
-    savefolder="plots/calo",
+    savefolder="plots/track",
 )
 # %%
 # model.save("model_eb")
