@@ -103,6 +103,17 @@ plot_quantile_curve(
     "LPEle_caloTarget",
     out,
     quantiles,
+    genp_bins=np.array([0, 600]),
+    eta_bins=[0, 1.44],
+    savefolder="plots/calo",
+    plot_distributions=True,
+)
+
+plot_quantile_curve(
+    df_test,
+    "LPEle_caloTarget",
+    out,
+    quantiles,
     genp_bins=np.arange(0, 600, 50),
     eta_bins=[0, 0.5, 0.8, 1.2, 1.44],
     savefolder="plots/calo",
