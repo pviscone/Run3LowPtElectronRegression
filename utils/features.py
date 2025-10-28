@@ -78,7 +78,7 @@ caloEB_features = calo_features + [
 ]
 
 caloEE_features = calo_features + [
-    "LPEle_rawESEnergy",
+    #"LPEle_rawESEnergy",
 ]
 
 

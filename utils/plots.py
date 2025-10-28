@@ -57,6 +57,7 @@ def response_resolution(
     eta_bins=None,
     genp_bins=None,
     plot_distributions=False,
+    res_ymax=0.5,
     lab="p",
     savefolder="plots",
 ):
@@ -273,7 +274,7 @@ def response_resolution(
                 ls="none",
             )
         ax.legend()
-        ax.set_ylim(0, 0.5)
+        ax.set_ylim(0, res_ymax)
         ax.text(0, 0.45, f"${eta_min} < | \eta | < {eta_max}$")
         # ax.set_yscale("log")
         hep.cms.text("Preliminary", ax=ax, loc=0, fontsize=22)
